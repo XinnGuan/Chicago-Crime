@@ -1,0 +1,25 @@
+---
+title: "Exploratory Data Analysis"
+output: html_document
+date: "2023-11-08"
+---
+
+```{r}
+data <- read.csv("OriginalData.csv")
+```
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+head(data)
+```
+
+```{r}
+colSums(is.na(data))
+```
+
+
+
+
