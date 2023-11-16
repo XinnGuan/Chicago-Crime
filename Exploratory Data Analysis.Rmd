@@ -5,7 +5,7 @@ date: "2023-11-08"
 ---
 
 ```{r}
-data <- read.csv("OriginalData.csv")
+df <- read.csv("OriginalData.csv")
 ```
 
 ```{r}
@@ -13,13 +13,71 @@ library(tidyverse)
 ```
 
 ```{r}
-head(data)
+head(df)
 ```
 
 ```{r}
-colSums(is.na(data))
+colSums(is.na(df))
 ```
 
+```{r}
+#Location.Description have " " instead of NA
+sum(df$Location.Description == "")
+```
+
+```{r}
+library("lubridate")
+df$Date <- mdy_hms(df$Date)
+```
+
+
+```{r}
+library("magrittr")
+df %<>% mutate(day=yday(Date))  %<>% mutate(hr=as.numeric(hour(Date))) %>% drop_na(X.Coordinate)
+df$X.Coordinate <- as.numeric(df$X.Coordinate)
+df$Y.Coordinate <- as.numeric(df$Y.Coordinate)
+df$Primary.Type <- as.factor(df$Primary.Type)
+```
+
+
+```{r}
+df$Arrest[df$Arrest == "true"] <- 1
+df$Arrest[df$Arrest == "false"] <- 0
+```
+
+
+```{r}
+library(dplyr)
+
+#make this example reproducible
+set.seed(1)
+
+#use 80% of dataset as training set and 30% as test set 
+train <- df %>% dplyr::sample_frac(0.80)
+train$Arrest <- as.factor(train$Arrest)
+test  <- dplyr::anti_join(df, train, by = 'ID')
+test$Arrest <- as.factor(test$Arrest)
+```
+
+```{r}
+log_reg0 <- glm(Arrest ~ X.Coordinate + Y.Coordinate + day + hr + Primary.Type, data=train, family = "binomial")
+```
+
+```{r}
+summary(log_reg0)
+```
+
+```{r}
+pred <- predict(log_reg0, test[,c("X.Coordinate", "Y.Coordinate", "day", "hr", "Primary.Type")], type = "response")
+```
+
+```{r}
+sum(pred>0.5)/dim(test)[1]
+```
+
+```{r}
+sum(df$Arrest == 1)/dim(df)[1]
+```
 
 
 

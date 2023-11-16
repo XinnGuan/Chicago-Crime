@@ -3,3 +3,5 @@ README.md
 *.csv
 *.md
 .Rproj.user
+*.Rproj
+.Rhistory
