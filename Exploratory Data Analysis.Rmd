@@ -79,5 +79,20 @@ sum(pred>0.5)/dim(test)[1]
 sum(df$Arrest == 1)/dim(df)[1]
 ```
 
+```{r}
+library(pROC)
+```
 
+```{r}
+# Create a ROC curve object
+roc_curve <- roc(test$Arrest, pred, levels = c(1, 0),direction = ">")
+
+# Plot the ROC curve
+plot(roc_curve, main = "ROC Curve", col = "blue", lwd = 2)
+
+# Add AUC to the plot
+auc_value <- auc(roc_curve)
+text(0.8, 0.2, paste("AUC =", round(auc_value, 3)), col = "blue", cex = 1.2)
+
+```
 
