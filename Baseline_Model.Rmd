@@ -10,6 +10,8 @@ df <- read.csv("OriginalData.csv")
 
 ```{r}
 library(tidyverse)
+library(caret)
+library(pROC)
 ```
 
 ```{r}
@@ -60,7 +62,13 @@ test$Arrest <- as.factor(test$Arrest)
 ```
 
 ```{r}
-log_reg0 <- glm(Arrest ~ X.Coordinate + Y.Coordinate + day + hr + Primary.Type, data=train, family = "binomial")
+train$Arrest <- make.names(train$Arrest)
+```
+
+```{r}
+ctrl <- trainControl(method = "cv", number = 5, summaryFunction = twoClassSummary, classProbs = TRUE)
+log_reg0 <- train(Arrest ~ X.Coordinate + Y.Coordinate + day + hr + 
+    Primary.Type, data = train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
 ```
 
 ```{r}
@@ -68,24 +76,17 @@ summary(log_reg0)
 ```
 
 ```{r}
-pred <- predict(log_reg0, test[,c("X.Coordinate", "Y.Coordinate", "day", "hr", "Primary.Type")], type = "response")
+print(log_reg0)
 ```
 
-```{r}
-sum(pred>0.5)/dim(test)[1]
-```
 
 ```{r}
-sum(df$Arrest == 1)/dim(df)[1]
-```
-
-```{r}
-library(pROC)
+pred <- predict(log_reg0, test[,c("X.Coordinate", "Y.Coordinate", "day", "hr", "Primary.Type")], type = "prob")
 ```
 
 ```{r}
 # Create a ROC curve object
-roc_curve <- roc(test$Arrest, pred, levels = c(1, 0),direction = ">")
+roc_curve <- roc(test$Arrest, pred[,2], levels = c(1, 0),direction = ">")
 
 # Plot the ROC curve
 plot(roc_curve, main = "ROC Curve", col = "blue", lwd = 2)
@@ -94,5 +95,11 @@ plot(roc_curve, main = "ROC Curve", col = "blue", lwd = 2)
 auc_value <- auc(roc_curve)
 text(0.8, 0.2, paste("AUC =", round(auc_value, 3)), col = "blue", cex = 1.2)
 ```
+
+
+
+
+
+
 
 

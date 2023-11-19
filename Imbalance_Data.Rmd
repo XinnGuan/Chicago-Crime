@@ -1,0 +1,127 @@
+---
+title: "Exploratory Data Analysis"
+output: html_document
+date: "2023-11-08"
+---
+
+```{r}
+df <- read.csv("OriginalData.csv")
+```
+
+```{r}
+library(tidyverse)
+library(caret)
+library(pROC)
+```
+
+```{r}
+head(df)
+```
+
+```{r}
+colSums(is.na(df))
+```
+
+```{r}
+#Location.Description have " " instead of NA
+sum(df$Location.Description == "")
+```
+
+```{r}
+library("lubridate")
+df$Date <- mdy_hms(df$Date)
+```
+
+
+```{r}
+library("magrittr")
+df %<>% mutate(day=yday(Date))  %<>% mutate(hr=as.numeric(hour(Date))) %>% drop_na(X.Coordinate)
+df$X.Coordinate <- as.numeric(df$X.Coordinate)
+df$Y.Coordinate <- as.numeric(df$Y.Coordinate)
+df$Primary.Type <- as.factor(df$Primary.Type)
+```
+
+
+```{r}
+df$Arrest[df$Arrest == "true"] <- 1
+df$Arrest[df$Arrest == "false"] <- 0
+```
+
+
+```{r}
+library(dplyr)
+
+#make this example reproducible
+set.seed(1)
+
+#use 80% of dataset as training set and 30% as test set 
+train <- df %>% dplyr::sample_frac(0.80)
+train$Arrest <- as.factor(train$Arrest)
+test  <- dplyr::anti_join(df, train, by = 'ID')
+test$Arrest <- as.factor(test$Arrest)
+```
+
+```{r}
+train$Arrest <- make.names(train$Arrest)
+```
+
+```{r}
+ctrl <- trainControl(method = "cv", number = 5, summaryFunction = twoClassSummary, classProbs = TRUE)
+log_reg0 <- train(Arrest ~ X.Coordinate + Y.Coordinate + day + hr + 
+    Primary.Type, data = train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
+```
+
+```{r}
+summary(log_reg0)
+```
+
+```{r}
+print(log_reg0)
+```
+
+
+```{r}
+pred <- predict(log_reg0, test[,c("X.Coordinate", "Y.Coordinate", "day", "hr", "Primary.Type")], type = "prob")
+```
+
+```{r}
+# Create a ROC curve object
+roc_curve <- roc(test$Arrest, pred[,2], levels = c(1, 0),direction = ">")
+
+# Plot the ROC curve
+plot(roc_curve, main = "ROC Curve", col = "blue", lwd = 2)
+
+# Add AUC to the plot
+auc_value <- auc(roc_curve)
+text(0.8, 0.2, paste("AUC =", round(auc_value, 3)), col = "blue", cex = 1.2)
+```
+
+
+```{r}
+class_weights <- ifelse(train$Arrest == 0, 0.01, 0.99)
+log_reg1 <- train(Arrest ~ X.Coordinate + Y.Coordinate + day + hr + 
+    Primary.Type, data = train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC", weights = class_weights)
+```
+
+```{r}
+print(log_reg1)
+```
+
+
+```{r}
+pred1 <- predict(log_reg1, test[,c("X.Coordinate", "Y.Coordinate", "day", "hr", "Primary.Type")], type = "prob")
+```
+
+```{r}
+# Create a ROC curve object
+roc_curve <- roc(test$Arrest, pred1[,2], levels = c(1, 0),direction = ">")
+
+# Plot the ROC curve
+plot(roc_curve, main = "ROC Curve", col = "blue", lwd = 2)
+
+# Add AUC to the plot
+auc_value <- auc(roc_curve)
+text(0.8, 0.2, paste("AUC =", round(auc_value, 3)), col = "blue", cex = 1.2)
+```
+
+
