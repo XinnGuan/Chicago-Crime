@@ -12,23 +12,15 @@ df <- read.csv("OriginalData.csv")
 library(tidyverse)
 library(caret)
 library(pROC)
-```
-
-```{r}
-head(df)
-```
-
-```{r}
-colSums(is.na(df))
-```
-
-```{r}
-#Location.Description have " " instead of NA
-sum(df$Location.Description == "")
-```
-
-```{r}
+library("MLmetrics")
+library("ROSE")
+library(dplyr)
 library("lubridate")
+```
+
+
+
+```{r}
 df$Date <- mdy_hms(df$Date)
 ```
 
@@ -43,14 +35,12 @@ df$Primary.Type <- as.factor(df$Primary.Type)
 
 
 ```{r}
-df$Arrest[df$Arrest == "true"] <- 1
-df$Arrest[df$Arrest == "false"] <- 0
+#df$Arrest[df$Arrest == "true"] <- 1
+#df$Arrest[df$Arrest == "false"] <- 0
 ```
 
 
 ```{r}
-library(dplyr)
-
 #make this example reproducible
 set.seed(1)
 
@@ -65,15 +55,19 @@ test$Arrest <- as.factor(test$Arrest)
 train$Arrest <- make.names(train$Arrest)
 ```
 
+
+## 5 fold cross-validation on train set
 ```{r}
 ctrl <- trainControl(method = "cv", number = 5, summaryFunction = twoClassSummary, classProbs = TRUE)
+```
+
+
+```{r}
 log_reg0 <- train(Arrest ~ X.Coordinate + Y.Coordinate + day + hr + 
     Primary.Type, data = train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
 ```
 
-```{r}
-summary(log_reg0)
-```
+
 
 ```{r}
 print(log_reg0)
@@ -95,6 +89,47 @@ plot(roc_curve, main = "ROC Curve", col = "blue", lwd = 2)
 auc_value <- auc(roc_curve)
 text(0.8, 0.2, paste("AUC =", round(auc_value, 3)), col = "blue", cex = 1.2)
 ```
+
+```{r}
+binary_predictions <- ifelse(predicted_probabilities >= 0.5, 1, 0)
+sum(binary_predictions==1)
+# create confusion matrix 
+confusionMatrix(as.factor(binary_predictions), test$Arrest,
+                mode = "everything",
+                positive="1")
+```
+```{r}
+binary_predictions <- ifelse(predicted_probabilities >= 0.3, 1, 0)
+sum(binary_predictions==1)
+confusionMatrix(as.factor(binary_predictions), test$Arrest,
+                mode = "everything",
+                positive="1")
+```
+## Tuning threshold
+```{r}
+predicted_probabilities <- pred[,2]
+  
+# Define a range of thresholds to evaluate
+thresholds <- seq(0, 1, by = 0.1)
+
+# Initialize a vector to store AUC values for each threshold
+auc_values <- numeric(length(thresholds))
+
+# Loop through thresholds, compute AUC for each
+for (i in seq_along(thresholds)) {
+  binary_predictions <- ifelse(predicted_probabilities >= thresholds[i], 1, 0)
+  roc_values <- roc(test$Arrest, binary_predictions, levels = c(1, 0),direction = ">")
+  auc_values[i] <- auc(roc_values)
+}
+
+# Find the threshold that maximizes AUC
+optimal_threshold <- thresholds[which.max(auc_values)]
+
+# Display the results
+cat("Optimal Threshold:", optimal_threshold, "\n")
+cat("Maximum AUC:", max(auc_values), "\n")
+```
+
 
 
 ```{r}
@@ -124,4 +159,30 @@ auc_value <- auc(roc_curve)
 text(0.8, 0.2, paste("AUC =", round(auc_value, 3)), col = "blue", cex = 1.2)
 ```
 
+## Undersampling
 
+```{r}
+train_balanced_under <- ovun.sample(Arrest ~ ., data = train, method = "under", seed = 1)$data
+train_balanced_under$Arrest <- as.factor(train_balanced_under$Arrest)
+table(train_balanced_under$Arrest)
+```
+
+
+```{r}
+log_reg3 <- train(Arrest ~ X.Coordinate + Y.Coordinate + day + hr + 
+    Primary.Type, data = train_balanced_under, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
+```
+
+```{r}
+pred3 <- predict(log_reg3, test[,c("X.Coordinate", "Y.Coordinate", "day", "hr", "Primary.Type")], type = "prob")
+```
+
+
+```{r}
+binary_predictions <- ifelse(pred3[,2] >= 0.5, "true", "false")
+sum(binary_predictions=="true")
+# create confusion matrix 
+confusionMatrix(as.factor(binary_predictions), test$Arrest,
+                mode = "everything",
+                positive="true")
+```
