@@ -1,0 +1,273 @@
+---
+title: "group project"
+output: html_document
+date: "2023-11-08"
+---
+
+
+```{r}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(lubridate)
+library(readr)
+library(e1071)
+library(doParallel)
+library(mltools)
+library(caret)
+library(kernlab)
+library(ROCR)
+library(data.table)
+library(ROCR)
+library(pROC)
+
+```
+
+```{r}
+
+setwd("/home/ia23879/Downloads")
+df <- read.csv("crime_data.csv")
+
+```
+
+```{r}
+
+data <- df %>% select(Date, Primary.Type, Location.Description, Arrest, District, X.Coordinate, Y.Coordinate)
+data <- data %>% filter(!Primary.Type %in% c("NON-CRIMINAL", "OTHER NARCOTIC VIOLATION", "PUBLIC INDECENCY", "HUMAN TRAFFICKING", "OBSCENITY"))
+data$Date <- parse_datetime(data$Date, format = "%m/%d/%Y %I:%M:%S %p")
+data <- data %>%
+  mutate(Date = as.POSIXct(Date, format = "%m/%d/%Y %I:%M:%S %p"),
+         time = format(as.POSIXct(Date), format = "%H"),
+         date = as.Date(Date),
+         month = format(as.Date(date, format = "%m/%d/%Y"), "%m"))
+
+data$X.Coordinate <- as.numeric(data$X.Coordinate)
+data$Y.Coordinate <- as.numeric(data$Y.Coordinate)
+data$Primary.Type <- as.factor(data$Primary.Type)
+data$time <- as.numeric(data$time)
+data$District <- as.factor(data$District)
+
+data <- data %>% select(Primary.Type, Arrest, District, time) %>% drop_na()
+
+data <- as.data.table(data)
+data <- one_hot(data)
+
+```
+
+
+Fisrt: svm with radial basis kernel as the relationship between outcome and variables is unclear. 
+
+SVMs have a training time complexity that is roughly cubic in the number of data points. As the dataset size increases, the time required for training also increases rapidly. This makes SVMs computationally expensive for large datasets.
+
+SVMs often need to store the entire training dataset in memory to find support vectors, especially during the training phase. Large datasets may not fit into the memory of a standard machine, leading to increased reliance on disk storage and causing a slowdown in the training process.
+
+SVMs do not scale well with the number of data points. The optimization problem they solve is quadratic in the number of samples, making them less efficient for large-scale datasets.
+
+Support Vector Machines (SVMs) face challenges with large datasets due to their cubic time complexity during training, making them computationally expensive as the dataset size increases. Additionally, SVMs often require storing the entire training dataset in memory, which can be impractical for large datasets, leading to reliance on disk storage and slowing down the training process. Furthermore, SVMs exhibit scalability issues, as the optimization problem they solve is quadratic in the number of samples, diminishing their efficiency for large-scale datasets.
+
+So for when fitting our models, we will use a random sample from our data set, using 3 types of sampling methods.
+
+1. Proportional sample: which attempts to generate a sample where the proportion of each classes emulates the original data set.
+
+Take 5% of the data to train our model on.
+
+
+```{r}
+
+trainIndex <- createDataPartition(data$Arrest, p = .05, list = TRUE)
+train <- data[trainIndex$Resample,]
+train %>% dplyr::count(Arrest)
+
+```
+
+
+
+
+```{r}
+
+#Create Seeds for the Cross Validation Function
+seeds <- vector(mode = "list", length = 6)
+for(i in 1:6) seeds[[i]] <- sample.int(n=1000, 3)
+#Define Cross Validation Function
+control <- trainControl(method = 'cv', number = 5, allowParallel = TRUE, seeds=seeds)
+
+```
+
+
+```{r}
+
+cl <- makePSOCKcluster(detectCores() - 1)
+
+registerDoParallel(cl)
+
+#Fitting SVM Model with a Proportional Sample
+svm.model <- train(Arrest ~ ., data = train, trControl = control, method = 'svmRadial', family = binomial(), allowParallel = TRUE)
+
+stopCluster(cl)
+
+```
+
+
+```{r}
+
+sampIndex <- createDataPartition(data$Arrest, p = .025, list = TRUE)
+
+test <- data[sampIndex$Resample,]
+
+test$Arrest <- as.factor(test$Arrest)
+
+u <- confusionMatrix(data = predict(svm.model, newdata = test), reference = test$Arrest, positive = 'true')
+
+#c <-  c(u[["overall"]][["Accuracy"]], u[["byClass"]][["Sensitivity"]], u[["byClass"]][["Specificity"]], u[["byClass"]][["Balanced Accuracy"]])
+
+#c
+
+u
+
+```
+
+
+
+```{r}
+
+pred <- predict(svm.model, newdata = test)
+
+roc_svm_test <- roc(response = test$Arrest, predictor = as.numeric(pred))
+
+
+```
+
+```{r}
+
+plot(roc_svm_test, col = "green", lwd = 1.5)
+
+auc_value <- auc(roc_svm_test)
+cat("AUC:", auc_value, "\n")
+```
+
+
+2. Downsampling : downsampling is a mechanism that reduces the count of training samples falling under the majority class. As it helps to even up the counts of target categories. By removing the collected data, we tend to lose so much valuable information.
+
+Downsampling is a technique used in machine learning to address imbalanced datasets. In an imbalanced dataset, the number of instances in one class (the majority class) significantly outweighs the number of instances in another class (the minority class). Downsampling involves reducing the number of instances in the majority class to balance it with the number of instances in the minority class.
+
+Randomly remove instances from the majority class until the class distribution is balanced. This method is straightforward but may discard potentially valuable information.
+
+
+```{r}
+
+data$Arrest = as.factor(data$Arrest)
+
+down_sample <- downSample(x = data, y = data$Arrest)
+
+down_sample %>% count(Arrest)
+```
+
+```{r}
+
+trainIndexD <- createDataPartition(down_sample$Arrest, p = nrow(train)/nrow(down_sample), list = TRUE)
+
+train2 <- down_sample[trainIndexD$Resample,] %>% select(-Class)
+
+train2 %>% count(Arrest)
+
+```
+
+```{r}
+
+cl <- makePSOCKcluster(detectCores() - 1)
+
+registerDoParallel(cl)
+
+#Fitting SVM Model with a Proportional Sample
+svm.model2 <- train(Arrest ~ ., data = train2, trControl = control, method = 'svmRadial', family = binomial(), allowParallel = TRUE)
+
+stopCluster(cl)
+
+```
+
+```{r}
+
+sampIndex <- createDataPartition(data$Arrest, p = .025, list = TRUE)
+
+test <- data[sampIndex$Resample,]
+
+test$Arrest <- as.factor(test$Arrest)
+
+u2 <- confusionMatrix(data = predict(svm.model2, newdata = test), reference = test$Arrest, positive = 'true')
+
+u2
+
+```
+
+```{r}
+
+pred2 <- predict(svm.model2, newdata = test)
+
+roc_svm_test2 <- roc(response = test$Arrest, predictor = as.numeric(pred2))
+
+
+```
+
+```{r}
+
+plot(roc_svm_test2, col = "green", lwd = 1.5)
+
+auc_value <- auc(roc_svm_test2)
+cat("AUC:", auc_value, "\n")
+```
+
+2. Upsampling: is a technique used in machine learning to address imbalanced datasets. In an imbalanced dataset, one class (the minority class) has significantly fewer instances than another class (the majority class). Upsampling involves increasing the number of instances in the minority class to balance it with the number of instances in the majority class.
+
+Randomly duplicate instances from the minority class until the class distribution is balanced. This method is straightforward but may lead to overfitting since it replicates existing instances.
+
+
+```{r}
+
+up_sample <- upSample(x = data, y = data$Arrest)
+
+up_sample %>% count(Arrest)
+
+trainIndexD <- createDataPartition(up_sample$Arrest, p = nrow(train)/nrow(up_sample), list = TRUE)
+
+train3 <- up_sample[trainIndexD$Resample,] %>% select(-Class)
+
+train3 %>% count(Arrest)
+
+```
+
+
+```{r}
+
+cl <- makePSOCKcluster(detectCores() - 1)
+
+registerDoParallel(cl)
+
+#Fitting SVM Model with a Proportional Sample
+svm.model3 <- train(Arrest ~ ., data = train3, trControl = control, method = 'svmRadial', family = binomial(), allowParallel = TRUE)
+
+stopCluster(cl)
+
+sampIndex <- createDataPartition(data$Arrest, p = .025, list = TRUE)
+
+test <- data[sampIndex$Resample,]
+
+test$Arrest <- as.factor(test$Arrest)
+
+u3 <- confusionMatrix(data = predict(svm.model3, newdata = test), reference = test$Arrest, positive = 'true')
+
+u3
+
+```
+
+```{r}
+
+pred3 <- predict(svm.model3, newdata = test)
+
+roc_svm_test3 <- roc(response = test$Arrest, predictor = as.numeric(pred3))
+
+plot(roc_svm_test3, col = "green", lwd = 1.5)
+
+auc_value <- auc(roc_svm_test3)
+cat("AUC:", auc_value, "\n")
+```
+
