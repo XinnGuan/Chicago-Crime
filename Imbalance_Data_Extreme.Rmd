@@ -19,25 +19,44 @@ library("lubridate")
 ```
 
 
+```{r}
+# Separate positive and negative classes
+true_class <- df %>% filter(Arrest == "true")
+false_class <- df %>% filter(Arrest == "false")
+
+# Set the desired ratio of positive to negative samples
+desired_positive_ratio <- 0.05
+
+# Calculate the number of positive samples needed for downsampling
+num_true_samples <- 0.05*nrow(false_class) / (1 + desired_positive_ratio)
+
+# Randomly sample positive samples
+true_class_downsampled <- true_class %>% sample_n(num_true_samples, replace = FALSE, seed = 42)
+
+# Combine positive and downsampled negative samples
+downsampled_dataset <- bind_rows(false_class, true_class_downsampled)
+
+# Shuffle the dataset to mix positive and negative samples
+set.seed(42)
+downsampled_dataset <- downsampled_dataset[sample(nrow(downsampled_dataset)), ]
+
+sum(downsampled_dataset[,"Arrest"]=="true")/dim(df)[1]
+```
 
 ```{r}
-df$Date <- mdy_hms(df$Date)
+downsampled_dataset$Date <- mdy_hms(downsampled_dataset$Date)
 ```
 
 
 ```{r}
 library("magrittr")
-df %<>% mutate(day=yday(Date))  %<>% mutate(hr=as.numeric(hour(Date))) %>% drop_na(X.Coordinate)
-df$X.Coordinate <- as.numeric(df$X.Coordinate)
-df$Y.Coordinate <- as.numeric(df$Y.Coordinate)
-df$Primary.Type <- as.factor(df$Primary.Type)
+downsampled_dataset %<>% mutate(day=yday(Date))  %<>% mutate(hr=as.numeric(hour(Date))) %>% drop_na(X.Coordinate)
+downsampled_dataset$X.Coordinate <- as.numeric(downsampled_dataset$X.Coordinate)
+downsampled_dataset$Y.Coordinate <- as.numeric(downsampled_dataset$Y.Coordinate)
+downsampled_dataset$Primary.Type <- as.factor(downsampled_dataset$Primary.Type)
 ```
 
 
-```{r}
-#df$Arrest[df$Arrest == "true"] <- 1
-#df$Arrest[df$Arrest == "false"] <- 0
-```
 
 
 ```{r}
@@ -45,9 +64,9 @@ df$Primary.Type <- as.factor(df$Primary.Type)
 set.seed(1)
 
 #use 80% of dataset as training set and 30% as test set 
-train <- df %>% dplyr::sample_frac(0.80)
+train <- downsampled_dataset %>% dplyr::sample_frac(0.80)
 train$Arrest <- as.factor(train$Arrest)
-test  <- dplyr::anti_join(df, train, by = 'ID')
+test  <- dplyr::anti_join(downsampled_dataset, train, by = 'ID')
 test$Arrest <- as.factor(test$Arrest)
 ```
 
@@ -99,8 +118,31 @@ confusionMatrix(as.factor(binary_predictions), test$Arrest,
                 mode = "everything",
                 positive="true")
 ```
+
 ```{r}
-binary_predictions <- ifelse(predicted_probabilities >= 0.3, "true", "false")
+f_beta_score <- function(data, lev = NULL, model = NULL) {
+  predictions <- predict(model, data[,c("X.Coordinate", "Y.Coordinate", "day", "hr", "Primary.Type")], type = "prob")[,2]
+  threshold <- 0.5  # You can adjust this threshold based on your needs
+  predicted_classes <- ifelse(predictions > threshold, "true", "false")
+  predicted_classes <- as.factor(predicted_classes)
+  pr <- confusionMatrix(data = predicted_classes, reference = data$Arrest, 
+                        mode = "everything", positive="true")
+  beta <- 3  # You can adjust this beta value based on your preference
+
+  precision <- as.numeric(pr$byClass["Precision"])
+  recall <- as.numeric(pr$byClass["Recall"])
+
+  f_beta <- ((1 + beta^2) * precision * recall) / (beta^2 * precision + recall)
+  return(f_beta)
+}
+
+print(f_beta_score(data = test,model = log_reg0))
+print(f_beta_score(data = test,model = log_reg3))
+```
+
+
+```{r}
+binary_predictions <- ifelse(pred_p[,2] >= 0.2, "true", "false")
 sum(binary_predictions=="true")
 confusionMatrix(as.factor(binary_predictions), test$Arrest,
                 mode = "everything",
@@ -108,7 +150,7 @@ confusionMatrix(as.factor(binary_predictions), test$Arrest,
 ```
 ## Tuning threshold
 ```{r}
-predicted_probabilities <- pred[,2]
+predicted_probabilities <- pred_p[,2]
   
 # Define a range of thresholds to evaluate
 thresholds <- seq(0, 1, by = 0.1)
@@ -118,8 +160,8 @@ auc_values <- numeric(length(thresholds))
 
 # Loop through thresholds, compute AUC for each
 for (i in seq_along(thresholds)) {
-  binary_predictions <- ifelse(predicted_probabilities >= thresholds[i], 1, 0)
-  roc_values <- roc(test$Arrest, binary_predictions, levels = c(1, 0),direction = ">")
+  binary_predictions <- ifelse(predicted_probabilities >= thresholds[i], "true", "false")
+  roc_values <- roc(test$Arrest, pred_p[, "true"])
   auc_values[i] <- auc(roc_values)
 }
 
