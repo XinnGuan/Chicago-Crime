@@ -1,0 +1,483 @@
+---
+title: "Improved Logistic Regression"
+author: "Yuqi Zhang"
+date: "2023-11-22"
+output: pdf_document
+---
+
+# Packages
+```{r}
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(caret)
+library(pROC)
+```
+
+# Data Preparation
+```{r}
+Crime_data <- read.csv("/Users/zhangyuqi/Downloads/Crimes_-_2019.csv")
+summary(Crime_data)
+
+# drop 'Case Number', 'Updated.On'
+Crime_data_1 <- Crime_data[,-c(2,19)]
+# NAN
+Crime_data_1 <- na.omit(Crime_data_1)
+
+# separate dates
+
+Crime_data_1$d <- mdy_hms(Crime_data_1$Date)
+Crime_data_1$WeekDay <- weekdays(Crime_data_1$d)
+Crime_data_1$DayOfMonth <- day(Crime_data_1$d)
+Crime_data_1$Month <- month(Crime_data_1$d, label = TRUE, abbr = FALSE)
+Crime_data_1$Time <- hours(Crime_data_1$d)*100 + minute(Crime_data_1$d)
+Crime_data_1$TimeOfDay <- cut(
+  hour(Crime_data_1$d),
+  breaks= c(-Inf, 5, 12, 17, 20, Inf),
+  labels = c("Night", "Early Morning", "Morning", "Afternoon", "Evening"),
+  include.lowest = TRUE
+)
+Crime_data_1$DayOfYear <- yday(Crime_data_1$d)
+
+```
+
+# Analysis of Variables
+```{r}
+# separate variable `dates`
+Crime_data_1$d <- mdy_hms(Crime_data_1$Date)
+Crime_data_1$WeekDay <- weekdays(Crime_data_1$d)
+Crime_data_1$DayOfMonth <- day(Crime_data_1$d)
+Crime_data_1$DayOfYear <- yday(Crime_data_1$d)
+Crime_data_1$Month <- month(Crime_data_1$d, label = TRUE, abbr = FALSE)
+Crime_data_1$Time <- hours(Crime_data_1$d)*100 + minute(Crime_data_1$d)
+Crime_data_1$TimeOfDay <- cut(
+  hour(Crime_data_1$d),
+  breaks= c(-Inf, 5, 12, 17, 20, Inf),
+  labels = c("Night", "Early Morning", "Morning", "Afternoon", "Evening"),
+  include.lowest = TRUE
+)
+
+```
+
+
+# EDA and Visualisation
+```{r}
+# ----------------------------------------------------------------------------
+# Components of Dates
+# ----------------------------------------------------------------------------
+# Weekdays
+arrests_by_weekday <- Crime_data_1 %>%
+  group_by(WeekDay) %>%
+  summarise(num_arrests = n())
+
+ggplot(arrests_by_weekday, aes(x = WeekDay, y = num_arrests, fill = WeekDay)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Number of Arrests by Weekday",
+       x = "Weekday",
+       y = "Number of Arrests") +
+  theme_minimal()
+
+# Month
+arrests_by_Month <- Crime_data_1 %>%
+  group_by(Month) %>%
+  summarise(num_arrests = n())
+
+ggplot(Crime_data_1, aes(x = Month, fill = Month)) +
+  geom_bar() +
+  labs(title = "Number of Arrests by Month",
+       x = "Month",
+       y = "Number of Arrests") +
+  theme_minimal()
+
+# DayOfMonth
+arrests_by_DayOfMonth <- Crime_data_1 %>%
+  group_by(DayOfMonth) %>%
+  summarise(num_arrests = n())
+
+ggplot(Crime_data_1, aes(x = DayOfMonth, fill = DayOfMonth)) +
+  geom_bar() +
+  labs(title = "Number of Arrests by DayOfMonth",
+       x = "DayOfMonth",
+       y = "Number of Arrests") +
+  theme_minimal()
+
+# DayOfYear
+arrests_by_DayOfYear <- Crime_data_1 %>%
+  group_by(DayOfYear) %>%
+  summarise(num_arrests = n())
+
+ggplot(Crime_data_1, aes(x = DayOfYear, fill = DayOfYear)) +
+  geom_bar() +
+  labs(title = "Number of Arrests by DayOfYear",
+       x = "DayOfYear",
+       y = "Number of Arrests") +
+  theme_minimal()
+
+
+# TimeOfDay
+arrests_by_TimeOfDay <- Crime_data_1 %>%
+  group_by(TimeOfDay) %>%
+  summarise(num_arrests = n())
+
+ggplot(Crime_data_1, aes(x = TimeOfDay, fill = TimeOfDay)) +
+  geom_bar() +
+  labs(title = "Number of Arrests by TimeOfDay",
+       x = "TimeOfDay",
+       y = "Number of Arrests") +
+  theme_minimal()
+
+# ----------------------------------------------------------------------------
+# Relations between `Primary.Type` and `TimeOfDay` in a specific `Weekday`
+# ----------------------------------------------------------------------------
+# Choose a specific weekday (e.g., "Monday")
+selected_weekday <- "Monday"
+# Filter the data for the selected weekday
+filtered_data <- Crime_data_1 %>% filter(WeekDay == selected_weekday)
+
+# Summary table with the count of crimes for each combination of `Primary.Type` and `TimeOfDay`
+crime_time_counts <- filtered_data %>%
+  group_by(Primary.Type, TimeOfDay) %>%
+  summarise(Count = n())
+
+ggplot(crime_time_counts, aes(x = TimeOfDay, y = Primary.Type, fill = Count)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  labs(title = paste("Primary.Type and TimeOfDay Relationship on", selected_weekday),
+       x = "Time of the Day",
+       y = "Primary.Type",
+       fill = "Crime Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "right")
+
+```
+# Logistic Regression
+## Preparation
+```{r}
+# ----------------------------------------------------------------------------
+# Preparation
+# ----------------------------------------------------------------------------
+# Reproducible
+set.seed(1)
+# Data
+Crime_data_1$X.Coordinate <- as.numeric(Crime_data_1$X.Coordinate)
+Crime_data_1$Y.Coordinate <- as.numeric(Crime_data_1$Y.Coordinate)
+Crime_data_1$DayOfMonth <- as.numeric(Crime_data_1$DayOfMonth)
+Crime_data_1$DayOfYear <- as.numeric(Crime_data_1$DayOfYear)
+Crime_data_1$Primary.Type <- as.factor(Crime_data_1$Primary.Type)
+Crime_data_1$TimeOfDay <- as.factor(Crime_data_1$TimeOfDay)
+Crime_data_1$Month <- as.factor(Crime_data_1$Month)
+Crime_data_1$WeekDay <- as.factor(Crime_data_1$WeekDay)
+
+Crime_data_1$Arrest[Crime_data_1$Arrest == "true"] <- 1
+Crime_data_1$Arrest[Crime_data_1$Arrest == "false"] <- 0
+Crime_data_1$Arrest <- as.factor(Crime_data_1$Arrest)
+
+# Training set and Test set
+# use 80% of dataset as training set and 20% as test set 
+train <- Crime_data_1 %>% dplyr::sample_frac(0.80)
+test  <- dplyr::anti_join(Crime_data_1, train, by = 'ID')
+train$Arrest <- make.names(train$Arrest)
+
+ctrl <- trainControl(method = "cv", 
+                     number = 5, 
+                     summaryFunction = twoClassSummary, 
+                     classProbs = TRUE)
+```
+
+
+## Baseline - See Xin's work
+
+## Update of Baseline - initial separate of `Date`
+```{r}
+# ----------------------------------------------------------------------------
+# Update of Baseline - initial separate of `Date`
+# ----------------------------------------------------------------------------
+log_reg_0 <- train(Arrest ~ X.Coordinate + Y.Coordinate + TimeOfDay + DayOfMonth + Primary.Type, 
+                  data = train, 
+                  method = "glm", 
+                  family = "binomial", 
+                  trControl = ctrl, 
+                  metric = "ROC")
+summary(log_reg_0)
+print(log_reg_0)
+
+pred_0 <- predict(log_reg_0, 
+                  test[,c("X.Coordinate", "Y.Coordinate", "TimeOfDay", "DayOfMonth", "Primary.Type")], 
+                  type = "prob")
+
+# ----------------------------------------------------------------------------
+# Evaluation - ROC and AUC
+# ----------------------------------------------------------------------------
+roc_0 <- roc(test$Arrest, pred_0[,2], levels = c(1, 0),direction = ">")
+plot(roc_0, main = "ROC Curve", col = "blue", lwd = 2)
+
+auc_0 <- auc(roc_0)
+text(0.8, 0.2, paste("AUC =", round(auc_0, 3)), col = "blue", cex = 1.2)
+
+# AUC = 0.811
+
+# ----------------------------------------------------------------------------
+# Evaluation - Recall, Precision and F1 score
+# ----------------------------------------------------------------------------
+threshold <- 0.5
+predicted_labels_0 <- ifelse(pred_0[, 2] > threshold, 1, 0)
+
+# Confusion matrix
+conf_mat_0 <- confusionMatrix(data = factor(predicted_labels_0), reference = factor(test$Arrest))
+conf_mat_table_0 <- conf_mat_0$table
+
+tp_0 <- conf_mat_table_0[2, 2]  # True Positives
+fp_0 <- conf_mat_table_0[1, 2]  # False Positives
+fn_0 <- conf_mat_table_0[2, 1]  # False Negatives
+tn_0 <- conf_mat_table_0[1, 1]  # True Negatives
+
+recall_0 <- tp_0 / (tp_0 + fn_0)
+precision_0 <- tp_0 / (tp_0 + fp_0)
+f1_score_0 <- 2 * (precision_0 * recall_0) / (precision_0 + recall_0)
+
+cat("Recall:", recall_0, "\n")
+cat("Precision:", precision_0, "\n")
+cat("F1 Score:", f1_score_0, "\n")
+
+# Recall: 0.8243895 
+# Precision: 0.4725392 
+# F1 Score: 0.6007368 
+```
+
+- **True Positives (TP):** Instances that are actually positive and were correctly classified as positive by the model.
+- **False Positives (FP):** Instances that are actually negative but were incorrectly classified as positive by the model.
+- **False Negatives (FN):** Instances that are actually positive but were incorrectly classified as negative by the model.
+- **True Negatives (TN):** Instances that are actually negative and were correctly classified as negative by the model.
+
+### Recall (Sensitivity or True Positive Rate)
+
+Recall is the proportion of actual positive instances that were correctly identified by the model.
+
+\[ \text{Recall} = \frac{\text{TP}}{\text{TP + FN}} \]
+
+Interpretation: Of all the actual positive instances, how many did the model correctly predict?
+
+### Precision (Positive Predictive Value)
+
+Precision is the proportion of instances predicted as positive that are actually positive.
+
+\[ \text{Precision} = \frac{\text{TP}}{\text{TP + FP}} \]
+
+Interpretation: Of all the instances predicted as positive, how many are actually positive?
+
+### F1 Score
+
+The F1 Score is the harmonic mean of Precision and Recall.
+
+\[ \text{F1 Score} = \frac{2 \times (\text{Precision} \times \text{Recall})}{\text{Precision + Recall}} \]
+
+Interpretation: The F1 Score provides a balance between Precision and Recall, especially in situations where there is an imbalance between the number of positive and negative instances. It is useful when you want to consider both false positives and false negatives and find a balance between them.
+
+In summary:
+
+- **Recall** is concerned with minimizing false negatives.
+- **Precision** is concerned with minimizing false positives.
+- **F1 Score** is a balance between Precision and Recall.
+
+
+## Improve-1
+```{r}
+# ----------------------------------------------------------------------------
+# More variables - seperation of `Date`
+# ----------------------------------------------------------------------------
+log_reg_1 <- train(Arrest ~ X.Coordinate + Y.Coordinate + TimeOfDay + DayOfMonth + DayOfYear + WeekDay + Month + Time + Primary.Type, 
+                  data = train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
+summary(log_reg_1)
+print(log_reg_1)
+
+pred_1 <- predict(log_reg_1, test[,c("X.Coordinate", "Y.Coordinate", "TimeOfDay", "DayOfMonth", "DayOfYear", "WeekDay", "Month", "Time", "Primary.Type")], type = "prob")
+
+# ----------------------------------------------------------------------------
+# Evaluation - ROC and AUC
+# ----------------------------------------------------------------------------
+roc_1 <- roc(test$Arrest, pred_1[,2], levels = c(1, 0),direction = ">")
+plot(roc_1, main = "ROC Curve", col = "blue", lwd = 2)
+
+auc_1 <- auc(roc_1)
+text(0.8, 0.2, paste("AUC =", round(auc_1, 3)), col = "blue", cex = 1.2)
+
+# AUC =0.825
+
+# ----------------------------------------------------------------------------
+# Evaluation - Recall, Precision and F1 score
+# ----------------------------------------------------------------------------
+threshold <- 0.5
+predicted_labels_1 <- ifelse(pred_1[, 2] > threshold, 1, 0)
+
+# Confusion matrix
+conf_mat_1 <- confusionMatrix(data = factor(predicted_labels_1), reference = factor(test$Arrest))
+conf_mat_table_1 <- conf_mat_1$table
+
+tp_1 <- conf_mat_table_1[2, 2]  # True Positives
+fp_1 <- conf_mat_table_1[1, 2]  # False Positives
+fn_1 <- conf_mat_table_1[2, 1]  # False Negatives
+tn_1 <- conf_mat_table_1[1, 1]  # True Negatives
+
+recall_1 <- tp_1 / (tp_1 + fn_1)
+precision_1 <- tp_1 / (tp_1 + fp_1)
+f1_score_1 <- 2 * (precision_1 * recall_1) / (precision_1 + recall_1)
+
+cat("Recall:", recall_1, "\n")
+cat("Precision:", precision_1, "\n")
+cat("F1 Score:", f1_score_1, "\n")
+
+# Recall: 0.8511963 
+# Precision: 0.4630884 
+# F1 Score: 0.5998383 
+```
+## Improve-2
+```{r}
+# ----------------------------------------------------------------------------
+# Transformation
+# ----------------------------------------------------------------------------
+# Applying triangular transformation
+train$DayOfMonth_triangular <- sqrt(train$DayOfMonth)
+train$DayOfYear_triangular <- sqrt(train$DayOfYear)
+test$DayOfMonth_triangular <- sqrt(test$DayOfMonth)
+test$DayOfYear_triangular <- sqrt(test$DayOfYear)
+
+# Fitting the logistic regression model with the transformed variables
+log_reg_2 <- train(
+  Arrest ~ X.Coordinate + Y.Coordinate + TimeOfDay + DayOfMonth_triangular + DayOfYear_triangular + 
+    WeekDay + Month + Time + Primary.Type, 
+  data = train, 
+  method = "glm", 
+  family = "binomial", 
+  trControl = ctrl, 
+  metric = "ROC"
+)
+
+summary(log_reg_2)
+print(log_reg_2)
+
+pred_2 <- predict(log_reg_2, test[,c("X.Coordinate", "Y.Coordinate", "TimeOfDay", "DayOfMonth_triangular", "DayOfYear_triangular", "WeekDay", "Month", "Time", "Primary.Type")], type = "prob")
+
+# ----------------------------------------------------------------------------
+# Evaluation - ROC and AUC
+# ----------------------------------------------------------------------------
+roc_2 <- roc(test$Arrest, pred_2[,2], levels = c(1, 0),direction = ">")
+plot(roc_2, main = "ROC Curve", col = "blue", lwd = 2)
+
+auc_2 <- auc(roc_2)
+text(0.8, 0.2, paste("AUC =", round(auc_2, 3)), col = "blue", cex = 1.2)
+
+# AUC =0.825
+
+# ----------------------------------------------------------------------------
+# Evaluation - Recall, Precision and F1 score
+# ----------------------------------------------------------------------------
+threshold <- 0.5
+predicted_labels_2 <- ifelse(pred_2[, 2] > threshold, 1, 0)
+
+# Confusion matrix
+conf_mat_2 <- confusionMatrix(data = factor(predicted_labels_2), reference = factor(test$Arrest))
+conf_mat_table_2 <- conf_mat_2$table
+
+tp_2 <- conf_mat_table_2[2, 2]  # True Positives
+fp_2 <- conf_mat_table_2[1, 2]  # False Positives
+fn_2 <- conf_mat_table_2[2, 1]  # False Negatives
+tn_2 <- conf_mat_table_2[1, 1]  # True Negatives
+
+recall_2 <- tp_2 / (tp_2 + fn_2)
+precision_2 <- tp_2 / (tp_2 + fp_2)
+f1_score_2 <- 2 * (precision_2 * recall_2) / (precision_2 + recall_2)
+
+cat("Recall:", recall_2, "\n")
+cat("Precision:", precision_2, "\n")
+cat("F1 Score:", f1_score_2, "\n")
+
+# Recall: 0.851008 
+# Precision: 0.4629101 
+# F1 Score: 0.599642 
+
+```
+
+
+
+## Improve-3
+```{r}
+# ----------------------------------------------------------------------------
+# Transformation
+# ----------------------------------------------------------------------------
+# Applying quadratic transformation
+train$Month_numeric <- as.numeric(train$Month)
+train$Month_quadratic <- sqrt(train$Month_numeric)
+train$TimeOfDay_numeric <- as.numeric(train$TimeOfDay)
+train$TimeOfDay_quadratic <- sqrt(train$TimeOfDay_numeric)
+test$Month_numeric <- as.numeric(test$Month)
+test$Month_quadratic <- sqrt(test$Month_numeric)
+test$TimeOfDay_numeric <- as.numeric(test$TimeOfDay)
+test$TimeOfDay_quadratic <- sqrt(test$TimeOfDay_numeric)
+
+# Fitting the logistic regression model with the transformed variables
+log_reg_3 <- train(
+  Arrest ~ X.Coordinate + Y.Coordinate + TimeOfDay + DayOfMonth_triangular + DayOfYear_triangular + 
+    WeekDay + Month_quadratic + TimeOfDay_quadratic + Time + Primary.Type, 
+  data = train, 
+  method = "glm", 
+  family = "binomial", 
+  trControl = ctrl, 
+  metric = "ROC"
+)
+
+summary(log_reg_3)
+print(log_reg_3)
+
+pred_3 <- predict(log_reg_3, test[,c("X.Coordinate", "Y.Coordinate", "TimeOfDay", "DayOfMonth_triangular", "DayOfYear_triangular", "WeekDay", "Month_quadratic", "TimeOfDay_quadratic", "Time", "Primary.Type")], type = "prob")
+
+# ----------------------------------------------------------------------------
+# Evaluation - ROC and AUC
+# ----------------------------------------------------------------------------
+roc_3 <- roc(test$Arrest, pred_3[,2], levels = c(1, 0),direction = ">")
+plot(roc_3, main = "ROC Curve", col = "blue", lwd = 2)
+
+auc_3 <- auc(roc_3)
+text(0.8, 0.2, paste("AUC =", round(auc_3, 3)), col = "blue", cex = 1.2)
+
+# AUC =0.825
+
+# ----------------------------------------------------------------------------
+# Evaluation - Recall, Precision and F1 score
+# ----------------------------------------------------------------------------
+threshold <- 0.5
+predicted_labels_3 <- ifelse(pred_3[, 2] > threshold, 1, 0)
+
+# Confusion matrix
+conf_mat_3 <- confusionMatrix(data = factor(predicted_labels_3), reference = factor(test$Arrest))
+conf_mat_table_3 <- conf_mat_3$table
+
+tp_3 <- conf_mat_table_3[2, 2]  # True Positives
+fp_3 <- conf_mat_table_3[1, 2]  # False Positives
+fn_3 <- conf_mat_table_3[2, 1]  # False Negatives
+tn_3 <- conf_mat_table_3[1, 1]  # True Negatives
+
+recall_3 <- tp_3 / (tp_3 + fn_3)
+precision_3 <- tp_3 / (tp_3 + fp_3)
+f1_score_3 <- 2 * (precision_3 * recall_3) / (precision_3 + recall_3)
+
+cat("Recall:", recall_3, "\n")
+cat("Precision:", precision_3, "\n")
+cat("F1 Score:", f1_score_3, "\n")
+
+# Recall: 0.8511475 
+# Precision: 0.4629101 
+# F1 Score: 0.5996766 
+```
+
+
+
+
+
+
+
+
+
+
+
