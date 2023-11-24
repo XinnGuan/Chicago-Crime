@@ -67,6 +67,10 @@ train$Arrest <- make.names(train$Arrest)
 
 ```{r}
 ctrl <- trainControl(method = "cv", number = 5, summaryFunction = twoClassSummary, classProbs = TRUE)
+```
+
+
+```{r}
 log_reg0 <- train(Arrest ~ X.Coordinate + Y.Coordinate + day + hr + 
     Primary.Type, data = train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
 ```
@@ -98,8 +102,32 @@ text(0.8, 0.2, paste("AUC =", round(auc_value, 3)), col = "blue", cex = 1.2)
 
 
 
+```{r}
+log_reg1 <- train(Arrest ~ District + day + hr + Primary.Type, data = train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
+```
 
+```{r}
+summary(log_reg1)
+```
 
+```{r}
+print(log_reg)
+```
 
+```{r}
+pred <- predict(log_reg1, test[,c("District", "day", "hr", "Primary.Type")], type = "prob")
+```
+
+```{r}
+# Create a ROC curve object
+roc_curve <- roc(test$Arrest, pred[,2], levels = c(1, 0),direction = ">")
+
+# Plot the ROC curve
+plot(roc_curve, main = "ROC Curve", col = "blue", lwd = 2)
+
+# Add AUC to the plot
+auc_value <- auc(roc_curve)
+text(0.8, 0.2, paste("AUC =", round(auc_value, 3)), col = "blue", cex = 1.2)
+```
 
 

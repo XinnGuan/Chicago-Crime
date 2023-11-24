@@ -1,0 +1,54 @@
+---
+title: "Chicago Crime"
+author: "Xin Guan, Vera Hudak, Yuqi Zhang"
+output: html_document
+date: "2023-11-24"
+
+---
+```{r}
+# Packages required
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(caret)
+library(pROC)
+```
+
+## Data Processing
+
+```{r}
+# Read data
+Crime_data <- read.csv("OriginalData.csv")
+```
+
+### Processing variable 'Date'
+```{r}
+# We want to firstly convert the format of date for the `lubridate` package, then extract information from the date to create new variables.
+Crime_data$newDate <- mdy_hms(Crime_data$Date)
+Crime_data$WeekDay <- weekdays(Crime_data$newDate)
+Crime_data$DayOfYear <- yday(Crime_data$newDate)
+Crime_data$DayOfMonth <- day(Crime_data$newDate)
+Crime_data$Month <- month(Crime_data$newDate, label = TRUE, abbr = FALSE)
+Crime_data$Time <- hours(Crime_data$newDate)*100 + minute(Crime_data$newDate)
+Crime_data$TimeOfDay <- cut(
+  hour(Crime_data$newDate),
+  breaks= c(-Inf, 5, 12, 17, 20, Inf),
+  labels = c("Night", "Early Morning", "Morning", "Afternoon", "Evening"),
+  include.lowest = TRUE
+)
+```
+
+### Processing missing data
+```{r}
+colSums(is.na(Crime_data))
+```
+We can see that the number of missing values for the variables `X.Coordinate`, `Y.Coordinate`, `Latitude`, and `Longtitude` are exactly the same, we can deduce that the coordinates are calculated from the latitude and longitude, so we don't need to include both pairs of location information. Also since the number of missing value is small compare to the number of data size, we will just eliminate the rows with missing values.
+```{r}
+Crime_data %<>%  na.omit()
+```
+
+## Expalnatory Data Analysis
+
+
+
