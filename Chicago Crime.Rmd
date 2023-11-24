@@ -1,16 +1,18 @@
 ---
 title: "Chicago Crime"
 author: "Xin Guan, Vera Hudak, Yuqi Zhang"
-output: html_document
 date: "2023-11-24"
-
+output:
+  pdf_document: default
+  html_document: default
 ---
 ```{r}
 # Packages required
 library(lubridate)
 library(dplyr)
-library(ggplot2)
+library(magrittr)
 library(tidyverse)
+library(ggplot2)
 library(caret)
 library(pROC)
 library(MLmetrics)
@@ -99,16 +101,17 @@ base_m <- train(Arrest ~ X.Coordinate + Y.Coordinate + DayOfYear + Hour +
     Primary.Type, data = train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
 ```
 
-```{r}
-summary(base_m)
-```
-
-```{r}
-print(base_m)
-```
 
 ```{r}
 pred <- predict(base_m, test[,c("X.Coordinate", "Y.Coordinate", "DayOfYear", "Hour", "Primary.Type")], type = "prob")
+```
+
+```{r}
+binary_predictions <- ifelse(pred[,2] >= 0.5, "true", "false")
+# create confusion matrix 
+confusionMatrix(as.factor(binary_predictions), test$Arrest,
+                mode = "everything",
+                positive="true")
 ```
 
 ```{r}
