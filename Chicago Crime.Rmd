@@ -51,10 +51,27 @@ Crime_data %<>%  na.omit()
 ## Expalnatory Data Analysis
 
 
-## Feature Selection
 
+
+
+
+
+
+## Feature Selection
+Our first task is to predict whether arrest or not given time, location, and the crime type.
 ```{r}
 Binary_pred_df <- Crime_data %>% select(c("Time","WeekDay","DayOfMonth","DayOfYear"))
 #???location variables
 ```
+
+## Imbalance Data Experiments
+
+
+
+
+
+
+
+
+
 
