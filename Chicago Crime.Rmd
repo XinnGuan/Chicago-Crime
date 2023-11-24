@@ -27,8 +27,8 @@ Crime_data <- read.csv("OriginalData.csv")
 # We want to firstly convert the format of date for the `lubridate` package, then extract information from the date to create new variables.
 Crime_data$newDate <- mdy_hms(Crime_data$Date)
 Crime_data$WeekDay <- weekdays(Crime_data$newDate)
-Crime_data$DayOfYear <- yday(Crime_data$newDate)
 Crime_data$DayOfMonth <- day(Crime_data$newDate)
+Crime_data$DayOfYear <- yday(Crime_data$newDate)
 Crime_data$Month <- month(Crime_data$newDate, label = TRUE, abbr = FALSE)
 Crime_data$Time <- hours(Crime_data$newDate)*100 + minute(Crime_data$newDate)
 Crime_data$TimeOfDay <- cut(
@@ -51,4 +51,10 @@ Crime_data %<>%  na.omit()
 ## Expalnatory Data Analysis
 
 
+## Feature Selection
+
+```{r}
+Binary_pred_df <- Crime_data %>% select(c("Time","WeekDay","DayOfMonth","DayOfYear"))
+#???location variables
+```
 
