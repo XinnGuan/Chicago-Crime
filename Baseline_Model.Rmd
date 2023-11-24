@@ -61,9 +61,6 @@ test  <- dplyr::anti_join(df, train, by = 'ID')
 test$Arrest <- as.factor(test$Arrest)
 ```
 
-```{r}
-train$Arrest <- make.names(train$Arrest)
-```
 
 ```{r}
 ctrl <- trainControl(method = "cv", number = 5, summaryFunction = twoClassSummary, classProbs = TRUE)

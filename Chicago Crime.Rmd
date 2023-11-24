@@ -13,6 +13,8 @@ library(ggplot2)
 library(tidyverse)
 library(caret)
 library(pROC)
+library(MLmetrics)
+library(ROSE)
 ```
 
 ## Data Processing
@@ -26,11 +28,12 @@ Crime_data <- read.csv("OriginalData.csv")
 ```{r}
 # We want to firstly convert the format of date for the `lubridate` package, then extract information from the date to create new variables.
 Crime_data$newDate <- mdy_hms(Crime_data$Date)
+Crime_data$Hour <- hour(Crime_data$newDate)
 Crime_data$WeekDay <- weekdays(Crime_data$newDate)
 Crime_data$DayOfMonth <- day(Crime_data$newDate)
 Crime_data$DayOfYear <- yday(Crime_data$newDate)
 Crime_data$Month <- month(Crime_data$newDate, label = TRUE, abbr = FALSE)
-Crime_data$Time <- hours(Crime_data$newDate)*100 + minute(Crime_data$newDate)
+Crime_data$Time <- hour(Crime_data$newDate)*100 + minute(Crime_data$newDate) #This format of `Time` variable contains information of hour and minute only
 Crime_data$TimeOfDay <- cut(
   hour(Crime_data$newDate),
   breaks= c(-Inf, 5, 12, 17, 20, Inf),
@@ -60,7 +63,7 @@ Crime_data %<>%  na.omit()
 ## Feature Selection
 Our first task is to predict whether arrest or not given time, location, and the crime type.
 ```{r}
-Binary_pred_df <- Crime_data %>% select(c("Time","WeekDay","DayOfMonth","DayOfYear"))
+Binary_pred_df <- Crime_data %>% select(c("ID","X.Coordinate", "Y.Coordinate","Hour","Time","WeekDay","DayOfMonth","DayOfYear","Primary.Type","Arrest"))
 #???location variables
 ```
 
@@ -73,5 +76,49 @@ Binary_pred_df <- Crime_data %>% select(c("Time","WeekDay","DayOfMonth","DayOfYe
 
 
 
+## Baseline Model
 
+```{r}
+#make this example reproducible
+set.seed(1)
 
+#use 80% of dataset as training set and 30% as test set 
+train <- Binary_pred_df %>% dplyr::sample_frac(0.80)
+train$Arrest <- as.factor(train$Arrest)
+test  <- dplyr::anti_join(Binary_pred_df, train, by = 'ID')
+test$Arrest <- as.factor(test$Arrest)
+```
+
+```{r}
+# Define a 5-fold cross validation
+ctrl <- trainControl(method = "cv", number = 5, summaryFunction = twoClassSummary, classProbs = TRUE)
+```
+
+```{r}
+base_m <- train(Arrest ~ X.Coordinate + Y.Coordinate + DayOfYear + Hour + 
+    Primary.Type, data = train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
+```
+
+```{r}
+summary(base_m)
+```
+
+```{r}
+print(base_m)
+```
+
+```{r}
+pred <- predict(base_m, test[,c("X.Coordinate", "Y.Coordinate", "DayOfYear", "Hour", "Primary.Type")], type = "prob")
+```
+
+```{r}
+# Create a ROC curve object
+roc_curve <- roc(test$Arrest, pred[,2])
+
+# Plot the ROC curve
+plot(roc_curve, main = "ROC Curve", col = "blue", lwd = 2)
+
+# Add AUC to the plot
+auc_value <- auc(roc_curve)
+text(0.8, 0.2, paste("AUC =", round(auc_value, 3)), col = "blue", cex = 1.2)
+```
