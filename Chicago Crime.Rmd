@@ -6,7 +6,9 @@ output:
   pdf_document: default
   html_document: default
 ---
-```{r}
+```{r, set.seed(333)}
+knitr::opts_chunk$set(cache = T)
+# Make the whole document reproducible
 # Packages required
 library(lubridate)
 library(dplyr)
@@ -17,6 +19,7 @@ library(caret)
 library(pROC)
 library(MLmetrics)
 library(ROSE)
+library(knitr)
 ```
 
 ## Data Processing
@@ -65,35 +68,55 @@ Crime_data %<>%  na.omit()
 ## Feature Selection
 Our first task is to predict whether arrest or not given time, location, and the crime type.
 ```{r}
-Binary_pred_df <- Crime_data %>% select(c("ID","X.Coordinate", "Y.Coordinate","Hour","Time","WeekDay","DayOfMonth","DayOfYear","Primary.Type","Arrest"))
+Binary_pred_df <- Crime_data %>% select(c("ID","X.Coordinate", "Y.Coordinate","Hour","Time","WeekDay","DayOfMonth","DayOfYear","Primary.Type","Arrest","District"))
 #???location variables
 ```
 
-## Imbalance Data Experiments
 
 
 
 
-
-
-
-
-## Baseline Model
-
-```{r}
-#make this example reproducible
-set.seed(1)
-
-#use 80% of dataset as training set and 30% as test set 
-train <- Binary_pred_df %>% dplyr::sample_frac(0.80)
-train$Arrest <- as.factor(train$Arrest)
-test  <- dplyr::anti_join(Binary_pred_df, train, by = 'ID')
-test$Arrest <- as.factor(test$Arrest)
-```
-
+## Define Cross-validation
 ```{r}
 # Define a 5-fold cross validation
 ctrl <- trainControl(method = "cv", number = 5, summaryFunction = twoClassSummary, classProbs = TRUE)
+```
+
+
+
+
+## Imbalance Data Experiments with a Baseline Model
+
+```{r}
+# Separate positive and negative classes
+true_class <- Binary_pred_df %>% filter(Arrest == "true")
+false_class <- Binary_pred_df %>% filter(Arrest == "false")
+
+# Set the desired ratio of positive to negative samples
+desired_positive_ratio <- 0.05
+
+# Calculate the number of positive samples needed for downsampling
+num_true_samples <- 0.05*nrow(false_class) / (1 - desired_positive_ratio)
+
+# Randomly sample positive samples
+true_class_downsampled <- true_class %>% sample_n(num_true_samples, replace = FALSE, seed = 42)
+
+# Combine positive and downsampled negative samples
+downsampled_dataset <- bind_rows(false_class, true_class_downsampled)
+
+# Shuffle the dataset to mix positive and negative samples
+set.seed(42)
+downsampled_dataset <- downsampled_dataset[sample(nrow(downsampled_dataset)), ]
+
+sum(downsampled_dataset[,"Arrest"]=="true")/dim(df)[1]
+```
+
+```{r}
+#use 80% of dataset as training set and 30% as test set 
+train <- downsampled_dataset %>% dplyr::sample_frac(0.80)
+train$Arrest <- as.factor(train$Arrest)
+test  <- dplyr::anti_join(downsampled_dataset, train, by = 'ID')
+test$Arrest <- as.factor(test$Arrest)
 ```
 
 ```{r}
@@ -113,6 +136,19 @@ confusionMatrix(as.factor(binary_predictions), test$Arrest,
                 mode = "everything",
                 positive="true")
 ```
+```{r}
+#over sampling
+train_balanced_over <- ovun.sample(Arrest ~ ., data = train, method = "over")$data
+train_balanced_over$Arrest <- as.factor(train_balanced_over$Arrest)
+train_balanced_under <- ovun.sample(Arrest ~ ., data = train, method = "under")$data
+train_balanced_under$Arrest <- as.factor(train_balanced_under$Arrest)
+train.rose <- ROSE(Arrest ~ ., data = train)$data
+train.rose$Arrest <- as.factor(train.rose$Arrest)
+table(train.rose$Arrest)
+table(train_balanced_over$Arrest)
+table(train_balanced_under$Arrest)
+```
+
 
 ```{r}
 # Create a ROC curve object
@@ -125,3 +161,48 @@ plot(roc_curve, main = "ROC Curve", col = "blue", lwd = 2)
 auc_value <- auc(roc_curve)
 text(0.8, 0.2, paste("AUC =", round(auc_value, 3)), col = "blue", cex = 1.2)
 ```
+
+## F-beta Score
+```{r}
+f_beta_score <- function(X, y, model, beta) {
+  predictions <- predict(model, X, type = "prob")[,2]
+  threshold <- 0.5  # You can adjust this threshold based on your needs
+  predicted_classes <- ifelse(predictions > threshold, "true", "false")
+  predicted_classes <- as.factor(predicted_classes)
+  pr <- confusionMatrix(data = predicted_classes, reference = y, 
+                        mode = "everything", positive="true")
+
+  precision <- as.numeric(pr$byClass["Precision"])
+  recall <- as.numeric(pr$byClass["Recall"])
+
+  f_beta <- ((1 + beta^2) * precision * recall) / (beta^2 * precision + recall)
+  return(f_beta)
+}
+```
+
+
+
+
+
+
+## Train Test Split
+
+```{r}
+
+#use 80% of dataset as training set and 30% as test set 
+train <- Binary_pred_df %>% dplyr::sample_frac(0.80)
+train$Arrest <- as.factor(train$Arrest)
+train$District <- as.factor(train$District)
+test  <- dplyr::anti_join(Binary_pred_df, train, by = 'ID')
+test$Arrest <- as.factor(test$Arrest)
+test$District <- as.factor(test$District)
+```
+
+
+
+
+
+
+
+
+

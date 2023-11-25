@@ -28,7 +28,7 @@ false_class <- df %>% filter(Arrest == "false")
 desired_positive_ratio <- 0.05
 
 # Calculate the number of positive samples needed for downsampling
-num_true_samples <- 0.05*nrow(false_class) / (1 + desired_positive_ratio)
+num_true_samples <- 0.05*nrow(false_class) / (1 - desired_positive_ratio)
 
 # Randomly sample positive samples
 true_class_downsampled <- true_class %>% sample_n(num_true_samples, replace = FALSE, seed = 42)
@@ -120,14 +120,13 @@ confusionMatrix(as.factor(binary_predictions), test$Arrest,
 ```
 
 ```{r}
-f_beta_score <- function(data, lev = NULL, model = NULL) {
+f_beta_score <- function(data, model, beta) {
   predictions <- predict(model, data[,c("X.Coordinate", "Y.Coordinate", "day", "hr", "Primary.Type")], type = "prob")[,2]
   threshold <- 0.5  # You can adjust this threshold based on your needs
   predicted_classes <- ifelse(predictions > threshold, "true", "false")
   predicted_classes <- as.factor(predicted_classes)
   pr <- confusionMatrix(data = predicted_classes, reference = data$Arrest, 
                         mode = "everything", positive="true")
-  beta <- 3  # You can adjust this beta value based on your preference
 
   precision <- as.numeric(pr$byClass["Precision"])
   recall <- as.numeric(pr$byClass["Recall"])
