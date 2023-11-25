@@ -5,3 +5,6 @@ README.md
 .Rproj.user
 *.Rproj
 .Rhistory
+*.rdb
+*.rdx
+*.RData
