@@ -127,39 +127,6 @@ base_m <- train(Arrest ~ X.Coordinate + Y.Coordinate + DayOfYear + Hour +
     Primary.Type, data = imbalanced_train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
 ```
 
-
-```{r}
-pred <- predict(base_m, imbalanced_test[,c("X.Coordinate", "Y.Coordinate", "DayOfYear", "Hour", "Primary.Type")], type = "prob")
-```
-
-```{r}
-binary_predictions <- ifelse(pred[,2] >= 0.5, "true", "false")
-# create confusion matrix 
-confusionMatrix(as.factor(binary_predictions), imbalanced_test$Arrest,
-                mode = "everything",
-                positive="true")
-```
-```{r}
-binary_predictions <- ifelse(pred_under[,2] >= 0.5, "true", "false")
-# create confusion matrix 
-confusionMatrix(as.factor(binary_predictions), imbalanced_test$Arrest,
-                mode = "everything",
-                positive="true")
-```
-```{r}
-binary_predictions <- ifelse(pred_over[,2] >= 0.5, "true", "false")
-# create confusion matrix 
-confusionMatrix(as.factor(binary_predictions), imbalanced_test$Arrest,
-                mode = "everything",
-                positive="true")
-```
-```{r}
-binary_predictions <- ifelse(pred_rose[,2] >= 0.5, "true", "false")
-# create confusion matrix 
-confusionMatrix(as.factor(binary_predictions), imbalanced_test$Arrest,
-                mode = "everything",
-                positive="true")
-```
 ```{r}
 #over sampling
 train_balanced_over <- ovun.sample(Arrest ~ ., data = imbalanced_train, method = "over")$data
@@ -186,25 +153,37 @@ pred_rose <- predict(base_m_rose, imbalanced_test[,c("X.Coordinate", "Y.Coordina
 ```
 
 ```{r}
-# Create a ROC curve object
-roc.curve(imbalanced_test$Arrest, pred[,2])
-roc.curve(imbalanced_test$Arrest, pred_under[,2])
-roc.curve(imbalanced_test$Arrest, pred_over[,2])
-roc.curve(imbalanced_test$Arrest, pred_rose[,2])
+# Create a ROC curve object for each prediction
+roc_curve <- roc(imbalanced_test$Arrest, pred[,2])
+roc_curve_under <- roc(imbalanced_test$Arrest, pred_under[,2])
+roc_curve_over <- roc(imbalanced_test$Arrest, pred_over[,2])
+roc_curve_rose <- roc(imbalanced_test$Arrest, pred_rose[,2])
 
-# Plot the ROC curve
-plot(roc_curve, main = "ROC Curve", col = "blue", lwd = 2)
+# Plot the first ROC curve
+plot(roc_curve, col = "blue", lwd = 2, main = "ROC Curve")
 
-# Add AUC to the plot
+# Add AUC to the plot for the first curve
 auc_value <- auc(roc_curve)
 text(0.8, 0.2, paste("AUC =", round(auc_value, 3)), col = "blue", cex = 1.2)
+
+# Add the other ROC curves to the plot
+lines(roc_curve_under, col = "red", lwd = 2)
+lines(roc_curve_over, col = "green", lwd = 2)
+lines(roc_curve_rose, col = "purple", lwd = 2)
+
+# Add AUC values for the other curves
+text(0.8, 0.15, paste("AUC =", round(auc(roc_curve_under), 3)), col = "red", cex = 1.2)
+text(0.8, 0.1, paste("AUC =", round(auc(roc_curve_over), 3)), col = "green", cex = 1.2)
+text(0.8, 0.05, paste("AUC =", round(auc(roc_curve_rose), 3)), col = "purple", cex = 1.2)
+
+legend("bottomright", legend = c("Original", "Under-sampled", "Over-sampled", "ROSE"),
+       col = c("blue", "red", "green", "purple"), lty = 1, lwd = 2)
 ```
 
 ## F-beta Score
 ```{r}
-f_beta_score <- function(X, y, model, beta) {
+f_beta_score <- function(X, y, model, beta, threshold=0.5) {
   predictions <- predict(model, X, type = "prob")[,2]
-  threshold <- 0.5  # You can adjust this threshold based on your needs
   predicted_classes <- ifelse(predictions > threshold, "true", "false")
   predicted_classes <- as.factor(predicted_classes)
   pr <- confusionMatrix(data = predicted_classes, reference = y, 
@@ -218,6 +197,13 @@ f_beta_score <- function(X, y, model, beta) {
 }
 ```
 
+```{r}
+f2 <- f_beta_score(X=imbalanced_test[,c("X.Coordinate", "Y.Coordinate", "DayOfYear", "Hour", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m,beta=1)
+f2_under <- f_beta_score(X=imbalanced_test[,c("X.Coordinate", "Y.Coordinate", "DayOfYear", "Hour", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m_under,beta=1)
+f2_over <- f_beta_score(X=imbalanced_test[,c("X.Coordinate", "Y.Coordinate", "DayOfYear", "Hour", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m_over,beta=1)
+f2_rose <- f_beta_score(X=imbalanced_test[,c("X.Coordinate", "Y.Coordinate", "DayOfYear", "Hour", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m_rose,beta=1)
+print(c(f2,f2_under,f2_over,f2_rose))
+```
 
 
 
