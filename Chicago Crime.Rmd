@@ -128,6 +128,14 @@ base_m <- train(Arrest ~ X.Coordinate + Y.Coordinate + DayOfYear + Hour +
 ```
 
 ```{r}
+binary_predictions <- ifelse(pred[,2] >= 0.5, "true", "false")
+# create confusion matrix 
+confusionMatrix(as.factor(binary_predictions), imbalanced_test$Arrest,
+                mode = "everything",
+                positive="true")
+```
+
+```{r}
 #over sampling
 train_balanced_over <- ovun.sample(Arrest ~ ., data = imbalanced_train, method = "over")$data
 train_balanced_over$Arrest <- as.factor(train_balanced_over$Arrest)
@@ -179,6 +187,7 @@ text(0.8, 0.05, paste("AUC =", round(auc(roc_curve_rose), 3)), col = "purple", c
 legend("bottomright", legend = c("Original", "Under-sampled", "Over-sampled", "ROSE"),
        col = c("blue", "red", "green", "purple"), lty = 1, lwd = 2)
 ```
+Given the current highly imbalanced nature of the data, the effectiveness of comparing models using the AUC curve diminishes. It's advisable to explore alternative evaluation metrics. The provided code below computes the F-$\beta$ score, an generalization of the F-1 score, the F-1 score is included in the output of `confusionMatrix()` function. The parameter $\beta \geq 0$ is the weight assigned to recall, in the case, we should choose $\beta>1$, so we prioritize the recall.
 
 ## F-beta Score
 ```{r}
