@@ -6,9 +6,7 @@ output:
   pdf_document: default
   html_document: default
 ---
-```{r, set.seed(333)}
-knitr::opts_chunk$set(cache = T)
-# Make the whole document reproducible
+```{r}
 # Packages required
 library(lubridate)
 library(dplyr)
@@ -125,6 +123,10 @@ imbalanced_test %<>% select(-"ID")
 ```{r}
 base_m <- train(Arrest ~ X.Coordinate + Y.Coordinate + DayOfYear + Hour + 
     Primary.Type, data = imbalanced_train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
+```
+
+```{r}
+pred <- predict(base_m, imbalanced_test[,c("X.Coordinate", "Y.Coordinate", "DayOfYear", "Hour", "Primary.Type")], type = "prob")
 ```
 
 ```{r}
