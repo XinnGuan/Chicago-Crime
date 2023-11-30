@@ -207,10 +207,10 @@ f_beta_score <- function(X, y, model, beta, threshold=0.5) {
 ```
 
 ```{r}
-f2 <- f_beta_score(X=imbalanced_test[,c("X.Coordinate", "Y.Coordinate", "DayOfYear", "Hour", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m,beta=1)
-f2_under <- f_beta_score(X=imbalanced_test[,c("X.Coordinate", "Y.Coordinate", "DayOfYear", "Hour", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m_under,beta=1)
-f2_over <- f_beta_score(X=imbalanced_test[,c("X.Coordinate", "Y.Coordinate", "DayOfYear", "Hour", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m_over,beta=1)
-f2_rose <- f_beta_score(X=imbalanced_test[,c("X.Coordinate", "Y.Coordinate", "DayOfYear", "Hour", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m_rose,beta=1)
+f2 <- f_beta_score(X=imbalanced_test[,c("X.Coordinate", "Y.Coordinate", "DayOfYear", "Hour", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m,beta=5)
+f2_under <- f_beta_score(X=imbalanced_test[,c("X.Coordinate", "Y.Coordinate", "DayOfYear", "Hour", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m_under,beta=5)
+f2_over <- f_beta_score(X=imbalanced_test[,c("X.Coordinate", "Y.Coordinate", "DayOfYear", "Hour", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m_over,beta=5)
+f2_rose <- f_beta_score(X=imbalanced_test[,c("X.Coordinate", "Y.Coordinate", "DayOfYear", "Hour", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m_rose,beta=5)
 print(c(f2,f2_under,f2_over,f2_rose))
 ```
 
