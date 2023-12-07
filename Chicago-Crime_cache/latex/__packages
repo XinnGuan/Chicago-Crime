@@ -1,0 +1,17 @@
+lubridate
+dplyr
+magrittr
+tidyverse
+ggplot2
+tibble
+tidyr
+readr
+purrr
+stringr
+forcats
+lattice
+caret
+pROC
+MLmetrics
+ROSE
+knitr
