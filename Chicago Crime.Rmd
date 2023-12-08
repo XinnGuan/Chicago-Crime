@@ -68,10 +68,9 @@ Crime_data %<>%  na.omit()
 ## Feature Selection
 Our first task is to predict whether arrest or not given time, location, and the crime type.
 ```{r}
-Binary_pred_df <- Crime_data %>% select(c("ID","Hour","Time","WeekDay","DayOfMonth","DayOfYear","Primary.Type","Arrest","District"))
+Binary_pred_df <- Crime_data %>% select(c("ID","District","Hour","Time","WeekDay","DayOfMonth","DayOfYear","Primary.Type","Arrest")) %>% filter(District != "31")
 #???location variables
 ```
-
 
 
 
@@ -81,6 +80,7 @@ Binary_pred_df <- Crime_data %>% select(c("ID","Hour","Time","WeekDay","DayOfMon
 # Define a 5-fold cross validation
 ctrl <- trainControl(method = "cv", number = 5, summaryFunction = twoClassSummary, classProbs = TRUE)
 ```
+
 
 
 
@@ -153,7 +153,7 @@ table(train_balanced_under$Arrest)
 ```
 
 ```{r}
-base_m_under <- train(Arrest ~ District + DayOfYear + Hour + Primary.Type, data = train_balanced_under, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
+base_m_under <- train(Arrest ~., data = train_balanced_under, method = "glm", family = binomial, trControl = ctrl, metric = "ROC")
 base_m_over <- train(Arrest ~ District + DayOfYear + Hour + Primary.Type, data = train_balanced_over, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
 base_m_rose <- train(Arrest ~ District + DayOfYear + Hour + Primary.Type, data = train.rose, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
 ```
@@ -166,16 +166,17 @@ pred_rose <- predict(base_m_rose, imbalanced_test[,c("District", "DayOfYear", "H
 
 ```{r}
 # Create a ROC curve object for each prediction
-roc_curve <- roc(imbalanced_test$Arrest, pred[,2])
-roc_curve_under <- roc(imbalanced_test$Arrest, pred_under[,2])
-roc_curve_over <- roc(imbalanced_test$Arrest, pred_over[,2])
-roc_curve_rose <- roc(imbalanced_test$Arrest, pred_rose[,2])
+roc_curve <- pROC::roc(imbalanced_test$Arrest, pred[,2])
+#the roc function name is used in several packages, `pROC::roc` is used to ensure the roc function is from pROC package.
+roc_curve_under <- pROC::roc(imbalanced_test$Arrest, pred_under[,2])
+roc_curve_over <- pROC::roc(imbalanced_test$Arrest, pred_over[,2])
+roc_curve_rose <- pROC::roc(imbalanced_test$Arrest, pred_rose[,2])
 
 # Plot the first ROC curve
 plot(roc_curve, col = "blue", lwd = 2, main = "ROC Curve")
 
 # Add AUC to the plot for the first curve
-auc_value <- auc(roc_curve)
+auc_value <- pROC::auc(roc_curve)
 text(0.8, 0.2, paste("AUC =", round(auc_value, 3)), col = "blue", cex = 1.2)
 
 # Add the other ROC curves to the plot
@@ -184,9 +185,9 @@ lines(roc_curve_over, col = "green", lwd = 2)
 lines(roc_curve_rose, col = "purple", lwd = 2)
 
 # Add AUC values for the other curves
-text(0.8, 0.15, paste("AUC =", round(auc(roc_curve_under), 3)), col = "red", cex = 1.2)
-text(0.8, 0.1, paste("AUC =", round(auc(roc_curve_over), 3)), col = "green", cex = 1.2)
-text(0.8, 0.05, paste("AUC =", round(auc(roc_curve_rose), 3)), col = "purple", cex = 1.2)
+text(0.8, 0.15, paste("AUC =", round(pROC::auc(roc_curve_under), 3)), col = "red", cex = 1.2)
+text(0.8, 0.1, paste("AUC =", round(pROC::auc(roc_curve_over), 3)), col = "green", cex = 1.2)
+text(0.8, 0.05, paste("AUC =", round(pROC::auc(roc_curve_rose), 3)), col = "purple", cex = 1.2)
 
 legend("bottomright", legend = c("Original", "Under-sampled", "Over-sampled", "ROSE"),
        col = c("blue", "red", "green", "purple"), lty = 1, lwd = 2)
@@ -300,7 +301,5 @@ points_within_buffer <- st_intersection(crime_sf, buffer)
 
 # Print
 ```
-
-
 
 
