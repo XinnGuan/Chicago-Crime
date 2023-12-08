@@ -26,34 +26,32 @@ library(spatstat)
 
 ```{r}
 # Read data
-Crime_data <- read.csv("OriginalData.csv")
+df <- read.csv("OriginalData.csv")
 ```
 
 ### Processing variable 'Date'
 ```{r}
-# We want to firstly convert the format of date for the `lubridate` package, then extract information from the date to create new variables.
-Crime_data$newDate <- mdy_hms(Crime_data$Date)
-Crime_data$Hour <- hour(Crime_data$newDate)
-Crime_data$WeekDay <- weekdays(Crime_data$newDate)
-Crime_data$DayOfMonth <- day(Crime_data$newDate)
-Crime_data$DayOfYear <- yday(Crime_data$newDate)
-Crime_data$Month <- month(Crime_data$newDate, label = TRUE, abbr = FALSE)
-Crime_data$Time <- hour(Crime_data$newDate)*100 + minute(Crime_data$newDate) #This format of `Time` variable contains information of hour and minute only
-Crime_data$TimeOfDay <- cut(
-  hour(Crime_data$newDate),
-  breaks= c(-Inf, 5, 12, 17, 20, Inf),
-  labels = c("Night", "Early Morning", "Morning", "Afternoon", "Evening"),
-  include.lowest = TRUE
-)
+data <- df %>% select(ID,Date, Primary.Type, Location.Description, Arrest, District)
+data %<>% filter(!Primary.Type %in% c("NON-CRIMINAL", "OTHER NARCOTIC VIOLATION", "PUBLIC INDECENCY", "HUMAN TRAFFICKING", "OBSCENITY"))
+data$Date <- parse_datetime(data$Date, format = "%m/%d/%Y %I:%M:%S %p")
+data %<>%
+  mutate(Date = as.POSIXct(Date, format = "%m/%d/%Y %I:%M:%S %p"),
+         time = format(as.POSIXct(Date), format = "%H"),
+         date = as.Date(Date),
+         month = format(as.Date(date, format = "%m/%d/%Y"), "%m"),
+         DayofYear = yday(date),
+         weekday = weekdays(date))
 ```
+
+
 
 ### Processing missing data
 ```{r}
-colSums(is.na(Crime_data))
+colSums(is.na(data))
 ```
 We can see that the number of missing values for the variables `X.Coordinate`, `Y.Coordinate`, `Latitude`, and `Longtitude` are exactly the same, we can deduce that the coordinates are calculated from the latitude and longitude, so we don't need to include both pairs of location information. Also since the number of missing value is small compare to the number of data size, we will just eliminate the rows with missing values.
 ```{r}
-Crime_data %<>%  na.omit()
+data %<>%  na.omit()
 ```
 
 ## Expalnatory Data Analysis
@@ -68,8 +66,8 @@ Crime_data %<>%  na.omit()
 ## Feature Selection
 Our first task is to predict whether arrest or not given time, location, and the crime type.
 ```{r}
-Binary_pred_df <- Crime_data %>% select(c("ID","District","Hour","WeekDay","DayOfYear","Primary.Type","Arrest")) %>% filter(District != "31")
-#???location variables
+data %<>% filter(District != "31")
+sum(data$District=="31")
 ```
 
 
@@ -89,8 +87,8 @@ ctrl <- trainControl(method = "cv", number = 5, summaryFunction = twoClassSummar
 
 ```{r}
 # Separate positive and negative classes
-true_class <- Binary_pred_df %>% filter(Arrest == "true")
-false_class <- Binary_pred_df %>% filter(Arrest == "false")
+true_class <- data %>% filter(Arrest == "true")
+false_class <- data %>% filter(Arrest == "false")
 
 # Set the desired ratio of positive to negative samples
 desired_positive_ratio <- 0.05
@@ -113,7 +111,7 @@ sum(downsampled_dataset[,"Arrest"]=="true")/dim(df)[1]
 
 ```{r}
 #use 80% of dataset as training set and 20% as test set 
-variables_to_convert <- c("Arrest", "Primary.Type", "WeekDay")
+variables_to_convert <- c("Arrest", "Primary.Type", "weekday")
 imbalanced_train <- downsampled_dataset %>% dplyr::sample_frac(0.80)
 imbalanced_train[, variables_to_convert] <- lapply(imbalanced_train[, variables_to_convert], as.factor)
 imbalanced_test  <- dplyr::anti_join(downsampled_dataset, imbalanced_train, by = 'ID')
@@ -123,12 +121,12 @@ imbalanced_test %<>% select(-"ID")
 ```
 
 ```{r}
-base_m <- train(Arrest ~ District + DayOfYear + Hour + 
+base_m <- train(Arrest ~ District + DayofYear + time + 
     Primary.Type, data = imbalanced_train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
 ```
 
 ```{r}
-pred <- predict(base_m, imbalanced_test[,c("District", "DayOfYear", "Hour", "Primary.Type")], type = "prob")
+pred <- predict(base_m, imbalanced_test[,c("District", "DayofYear", "time", "Primary.Type")], type = "prob")
 ```
 
 ```{r}
@@ -141,30 +139,29 @@ confusionMatrix(as.factor(binary_predictions), imbalanced_test$Arrest,
 
 ```{r}
 #over sampling
-train_balanced_over <- ovun.sample(Arrest ~ District + DayOfYear + Hour + 
+train_balanced_over <- ovun.sample(Arrest ~ District + DayofYear + time + 
     Primary.Type, data = imbalanced_train, method = "over")$data
 train_balanced_over$Arrest <- as.factor(train_balanced_over$Arrest)
-train_balanced_under <- ovun.sample(Arrest ~ District + DayOfYear + Hour + 
+train_balanced_under <- ovun.sample(Arrest ~ District + DayofYear + time + 
     Primary.Type, data = imbalanced_train, method = "under")$data
 train_balanced_under$Arrest <- as.factor(train_balanced_under$Arrest)
-train.rose <- ROSE(Arrest ~ District + DayOfYear + Hour + 
-    Primary.Type, data = imbalanced_train)$data
-train.rose$Arrest <- as.factor(train.rose$Arrest)
-table(train.rose$Arrest)
+#train.rose <- ROSE(Arrest ~ District + DayofYear + time + Primary.Type, data = imbalanced_train)$data
+#train.rose$Arrest <- as.factor(train.rose$Arrest)
+#table(train.rose$Arrest)
 table(train_balanced_over$Arrest)
 table(train_balanced_under$Arrest)
 ```
 
 ```{r}
-base_m_under <- train(Arrest ~., data = train_balanced_under, method = "glm", family = binomial, trControl = ctrl, metric = "ROC")
-base_m_over <- train(Arrest ~ District + DayOfYear + Hour + Primary.Type, data = train_balanced_over, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
-base_m_rose <- train(Arrest ~ District + DayOfYear + Hour + Primary.Type, data = train.rose, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
+base_m_under <- train(Arrest ~District + DayofYear + time + Primary.Type, data = train_balanced_under, method = "glm", family = binomial, trControl = ctrl, metric = "ROC")
+base_m_over <- train(Arrest ~ District + DayofYear + time + Primary.Type, data = train_balanced_over, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
+#base_m_rose <- train(Arrest ~ District + DayOfYear + Hour + Primary.Type, data = train.rose, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
 ```
 
 ```{r}
-pred_under <- predict(base_m_under, imbalanced_test[,c("District", "DayOfYear", "Hour", "Primary.Type")], type = "prob")
-pred_over <- predict(base_m_over, imbalanced_test[,c("District", "DayOfYear", "Hour", "Primary.Type")], type = "prob")
-pred_rose <- predict(base_m_rose, imbalanced_test[,c("District", "DayOfYear", "Hour", "Primary.Type")], type = "prob")
+pred_under <- predict(base_m_under, imbalanced_test[,c("District", "DayofYear", "time", "Primary.Type")], type = "prob")
+pred_over <- predict(base_m_over, imbalanced_test[,c("District", "DayofYear", "time", "Primary.Type")], type = "prob")
+#pred_rose <- predict(base_m_rose, imbalanced_test[,c("District", "DayofYear", "time", "Primary.Type")], type = "prob")
 ```
 
 ```{r}
@@ -173,7 +170,7 @@ roc_curve <- pROC::roc(imbalanced_test$Arrest, pred[,2])
 #the roc function name is used in several packages, `pROC::roc` is used to ensure the roc function is from pROC package.
 roc_curve_under <- pROC::roc(imbalanced_test$Arrest, pred_under[,2])
 roc_curve_over <- pROC::roc(imbalanced_test$Arrest, pred_over[,2])
-roc_curve_rose <- pROC::roc(imbalanced_test$Arrest, pred_rose[,2])
+#roc_curve_rose <- pROC::roc(imbalanced_test$Arrest, pred_rose[,2])
 
 # Plot the first ROC curve
 plot(roc_curve, col = "blue", lwd = 2, main = "ROC Curve")
@@ -185,15 +182,15 @@ text(0.8, 0.2, paste("AUC =", round(auc_value, 3)), col = "blue", cex = 1.2)
 # Add the other ROC curves to the plot
 lines(roc_curve_under, col = "red", lwd = 2)
 lines(roc_curve_over, col = "green", lwd = 2)
-lines(roc_curve_rose, col = "purple", lwd = 2)
+#lines(roc_curve_rose, col = "purple", lwd = 2)
 
 # Add AUC values for the other curves
 text(0.8, 0.15, paste("AUC =", round(pROC::auc(roc_curve_under), 3)), col = "red", cex = 1.2)
 text(0.8, 0.1, paste("AUC =", round(pROC::auc(roc_curve_over), 3)), col = "green", cex = 1.2)
-text(0.8, 0.05, paste("AUC =", round(pROC::auc(roc_curve_rose), 3)), col = "purple", cex = 1.2)
+#text(0.8, 0.05, paste("AUC =", round(pROC::auc(roc_curve_rose), 3)), col = "purple", cex = 1.2)
 
-legend("bottomright", legend = c("Original", "Under-sampled", "Over-sampled", "ROSE"),
-       col = c("blue", "red", "green", "purple"), lty = 1, lwd = 2)
+legend("bottomright", legend = c("Original", "Under-sampled", "Over-sampled"),
+       col = c("blue", "red", "green"), lty = 1, lwd = 2)
 ```
 Given the current highly imbalanced nature of the data, the effectiveness of comparing models using the AUC curve diminishes. It's advisable to explore alternative evaluation metrics. The provided code below computes the F-$\beta$ score, an generalization of the F-1 score, the F-1 score is included in the output of `confusionMatrix()` function. The parameter $\beta \geq 0$ is the weight assigned to recall, in the case, we should choose $\beta>1$, so we prioritize the recall.
 
@@ -215,11 +212,10 @@ f_beta_score <- function(X, y, model, beta, threshold=0.5) {
 ```
 
 ```{r}
-f2 <- f_beta_score(X=imbalanced_test[,c("District", "DayOfYear", "Hour", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m,beta=5)
-f2_under <- f_beta_score(X=imbalanced_test[,c("District", "DayOfYear", "Hour", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m_under,beta=5)
-f2_over <- f_beta_score(X=imbalanced_test[,c("District", "DayOfYear", "Hour", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m_over,beta=5)
-f2_rose <- f_beta_score(X=imbalanced_test[,c("District", "DayOfYear", "Hour", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m_rose,beta=5)
-print(c(f2,f2_under,f2_over,f2_rose))
+f2 <- f_beta_score(X=imbalanced_test[,c("District", "DayofYear", "time", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m,beta=5)
+f2_under <- f_beta_score(X=imbalanced_test[,c("District", "DayofYear", "time", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m_under,beta=5)
+f2_over <- f_beta_score(X=imbalanced_test[,c("District", "DayofYear", "time", "Primary.Type")], y=imbalanced_test$Arrest,model=base_m_over,beta=5)
+print(c(f2,f2_under,f2_over))
 ```
 
 
