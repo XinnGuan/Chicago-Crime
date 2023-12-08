@@ -68,7 +68,7 @@ Crime_data %<>%  na.omit()
 ## Feature Selection
 Our first task is to predict whether arrest or not given time, location, and the crime type.
 ```{r}
-Binary_pred_df <- Crime_data %>% select(c("ID","District","Hour","Time","WeekDay","DayOfMonth","DayOfYear","Primary.Type","Arrest")) %>% filter(District != "31")
+Binary_pred_df <- Crime_data %>% select(c("ID","District","Hour","WeekDay","DayOfYear","Primary.Type","Arrest")) %>% filter(District != "31")
 #???location variables
 ```
 
@@ -141,11 +141,14 @@ confusionMatrix(as.factor(binary_predictions), imbalanced_test$Arrest,
 
 ```{r}
 #over sampling
-train_balanced_over <- ovun.sample(Arrest ~ ., data = imbalanced_train, method = "over")$data
+train_balanced_over <- ovun.sample(Arrest ~ District + DayOfYear + Hour + 
+    Primary.Type, data = imbalanced_train, method = "over")$data
 train_balanced_over$Arrest <- as.factor(train_balanced_over$Arrest)
-train_balanced_under <- ovun.sample(Arrest ~ ., data = imbalanced_train, method = "under")$data
+train_balanced_under <- ovun.sample(Arrest ~ District + DayOfYear + Hour + 
+    Primary.Type, data = imbalanced_train, method = "under")$data
 train_balanced_under$Arrest <- as.factor(train_balanced_under$Arrest)
-train.rose <- ROSE(Arrest ~ ., data = imbalanced_train)$data
+train.rose <- ROSE(Arrest ~ District + DayOfYear + Hour + 
+    Primary.Type, data = imbalanced_train)$data
 train.rose$Arrest <- as.factor(train.rose$Arrest)
 table(train.rose$Arrest)
 table(train_balanced_over$Arrest)
