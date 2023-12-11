@@ -371,9 +371,9 @@ print(c(f2,f2_under,f2_over))
 ```{r}
 #use 80% of dataset as training set and 20% as test set 
 variables_to_convert <- c("Arrest", "Primary.Type", "WeekDay")
-train <- Binary_pred_df %>% dplyr::sample_frac(0.80)
+train <- data %>% dplyr::sample_frac(0.80)
 train[, variables_to_convert] <- lapply(train[, variables_to_convert], as.factor)
-test  <- dplyr::anti_join(Binary_pred_df, train, by = 'ID')
+test  <- dplyr::anti_join(data, train, by = 'ID')
 test[, variables_to_convert] <- lapply(test[, variables_to_convert], as.factor)
 train %<>% select(-"ID")
 test %<>% select(-"ID")
