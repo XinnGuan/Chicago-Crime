@@ -381,7 +381,7 @@ test %<>% select(-"ID")
 
 ## Predict Probability of Arrest
 ### Logistic Regression Model
-### Logistic Regression Model
+
 ```{r}
 # Define a 5-fold cross validation
 ctrl <- trainControl(method = "cv", number = 5, summaryFunction = twoClassSummary, classProbs = TRUE)
