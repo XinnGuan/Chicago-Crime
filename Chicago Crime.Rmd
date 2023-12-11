@@ -55,8 +55,152 @@ data %<>%  na.omit()
 ```
 
 ## Expalnatory Data Analysis
+```{r}
+data$Primary.Type <- as.factor(data$Primary.Type)
+data$time <- as.numeric(data$time)
+data$District <- as.factor(data$District)
+data$Weekday <- as.factor(data$Weekday)
+
+data <- data %>% select(ID, Primary.Type, Arrest, District, time, DayOfYear, Weekday) %>% drop_na()
+```
+```{r}
+# Investigate of variables
+df_vis <- df
+
+df_vis$newDate <- mdy_hms(df_vis$Date)
+df_vis$WeekDay <- weekdays(df_vis$newDate)
+df_vis$DayOfMonth <- day(df_vis$newDate)
+df_vis$DayOfYear <- yday(df_vis$newDate)
+df_vis$Month <- month(df_vis$newDate, label = TRUE, abbr = FALSE)
+df_vis$TimeOfDay <- cut(
+  hour(df_vis$newDate),
+  breaks= c(-Inf, 5, 12, 17, 20, Inf),
+  labels = c("Night", "Early Morning", "Morning", "Afternoon", "Evening"),
+  include.lowest = TRUE
+)
+
+# Detailed Time
+# This format of `Time` variable contains information of hour and minute only
+df_vis$newDate <- as.POSIXct(df_vis$newDate, format = "%H:%M:%S")
+df_vis$Hour <- hour(df_vis$newDate)
+df_vis$Minute <- minute(df_vis$newDate)/60*10
+df_vis$Time <- df_vis$Hour + df_vis$Minute/60
 
 
+# ----------------------------------------------------------------------------
+# Components of Dates
+# ----------------------------------------------------------------------------
+# Weekdays
+arrests_by_weekday <- df_vis %>%
+  group_by(WeekDay) %>%
+  summarise(num_arrests = n())
+
+ggplot(arrests_by_weekday, aes(x = WeekDay, y = num_arrests, fill = WeekDay)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Number of Arrests by Weekday",
+       x = "Weekday",
+       y = "Number of Arrests") +
+  theme_minimal()
+
+# Month
+arrests_by_Month <- df_vis %>%
+  group_by(Month) %>%
+  summarise(num_arrests = n())
+
+ggplot(df_vis, aes(x = Month, fill = Month)) +
+  geom_bar() +
+  labs(title = "Number of Arrests by Month",
+       x = "Month",
+       y = "Number of Arrests") +
+  theme_minimal()
+
+# DayOfMonth
+arrests_by_DayOfMonth <- df_vis %>%
+  group_by(DayOfMonth) %>%
+  summarise(num_arrests = n())
+
+ggplot(df_vis, aes(x = DayOfMonth, fill = DayOfMonth)) +
+  geom_bar() +
+  labs(title = "Number of Arrests by DayOfMonth",
+       x = "DayOfMonth",
+       y = "Number of Arrests") +
+  theme_minimal()
+
+# DayOfYear
+arrests_by_DayOfYear <- df_vis %>%
+  group_by(DayOfYear) %>%
+  summarise(num_arrests = n())
+
+ggplot(df_vis, aes(x = DayOfYear, fill = DayOfYear)) +
+  geom_bar() +
+  labs(title = "Number of Arrests by DayOfYear",
+       x = "DayOfYear",
+       y = "Number of Arrests") +
+  theme_minimal()
+
+
+# TimeOfDay
+arrests_by_TimeOfDay <- df_vis %>%
+  group_by(TimeOfDay) %>%
+  summarise(num_arrests = n())
+
+ggplot(df_vis, aes(x = TimeOfDay, fill = TimeOfDay)) +
+  geom_bar() +
+  labs(title = "Number of Arrests by TimeOfDay",
+       x = "TimeOfDay",
+       y = "Number of Arrests") +
+  theme_minimal()
+
+# hours
+arrests_by_hour <- df_vis %>%
+  group_by(Hour) %>%
+  summarise(num_arrests = n())
+
+ggplot(df_vis, aes(x = Hour, fill = Hour)) +
+  geom_bar() +
+  labs(title = "Number of Arrests by Hour",
+       x = "Hour",
+       y = "Number of Arrests") +
+  theme_minimal()
+
+# District
+arrests_by_dist <- df_vis %>%
+  group_by(District) %>%
+  summarise(num_arrests = n())
+
+ggplot(df_vis, aes(x = District, fill = District)) +
+  geom_bar() +
+  labs(title = "Number of Arrests by District",
+       x = "District",
+       y = "Number of Arrests") +
+  theme_minimal()
+
+
+# ----------------------------------------------------------------------------
+# Relations between `Primary.Type` and `TimeOfDay` in a specific `Weekday`
+# ----------------------------------------------------------------------------
+# Choose a specific weekday (e.g., "Monday")
+selected_weekday <- "Monday"
+# Filter the data for the selected weekday
+filtered_data <- df_vis %>% filter(WeekDay == selected_weekday)
+
+# Summary table with the count of crimes for each combination of `Primary.Type` and `TimeOfDay`
+crime_time_counts <- filtered_data %>%
+  group_by(Primary.Type, TimeOfDay) %>%
+  summarise(Count = n())
+
+ggplot(crime_time_counts, aes(x = TimeOfDay, y = Primary.Type, fill = Count)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  labs(title = paste("Primary.Type and TimeOfDay Relationship on", selected_weekday),
+       x = "Time of the Day",
+       y = "Primary.Type",
+       fill = "Crime Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "right")
+
+```
 
 
 
@@ -237,7 +381,86 @@ test %<>% select(-"ID")
 
 ## Predict Probability of Arrest
 ### Logistic Regression Model
+### Logistic Regression Model
+```{r}
+# Define a 5-fold cross validation
+ctrl <- trainControl(method = "cv", number = 5, summaryFunction = twoClassSummary, classProbs = TRUE)
+```
 
+ - base
+
+```{r}
+base_m <- train(Arrest ~ District + DayOfYear + time + Primary.Type, 
+                data = train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
+```
+
+```{r}
+pred <- predict(base_m, test[,c("District", "DayOfYear", "time", "Primary.Type")], type = "prob")
+```
+
+```{r}
+binary_predictions <- ifelse(pred[,2] >= 0.5, "true", "false")
+# create confusion matrix 
+confusionMatrix(as.factor(binary_predictions), test$Arrest,
+                mode = "everything",
+                positive="true")
+roc_curve <- pROC::roc(test$Arrest, pred[,2],levels = c("true", "false"),direction = ">")
+plot(roc_curve, main = "ROC Curve for Baseline Model", col = "blue", lwd = 2)
+
+auc_curve <- pROC::auc(roc_curve)
+text(0.8, 0.2, paste("AUC =", round(auc_curve, 3)), col = "blue", cex = 1.2)
+```
+
+ - improvement of baseline 1
+
+```{r}
+logistic_im_1 <- train(Arrest ~ District + DayOfYear + Weekday + time + Primary.Type, 
+                       data = train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
+
+# Cannot use `Time` - result in multicollineararity
+# DayOfMonth and Month 
+
+pred_im_1 <- predict(logistic_im_1, test[,c("District", "DayOfYear", "Weekday", "time", "Primary.Type")], type = "prob")
+
+binary_predictions_im_1 <- ifelse(pred_im_1[,2] >= 0.5, "true", "false")
+# create confusion matrix 
+confusionMatrix(as.factor(binary_predictions_im_1), test$Arrest,
+                mode = "everything",
+                positive="true")
+
+roc_1 <- pROC::roc(test$Arrest, pred_im_1[,2], levels = c("true", "false"),direction = ">")
+plot(roc_1, main = "ROC Curve", col = "blue", lwd = 2)
+
+auc_1 <- pROC::auc(roc_1)
+text(0.8, 0.2, paste("AUC =", round(auc_1, 3)), col = "blue", cex = 1.2)
+
+```
+
+ - improvement of baseline 2
+
+```{r}
+train$time_t <- asin(train$time/24)
+test$time_t <- asin(test$time/24)
+
+logistic_im_2 <- train(Arrest ~ District + DayOfYear + Weekday + time_t + Primary.Type, 
+                       data = train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
+
+# Cannot use `Time` - result in multicollineararity
+
+pred_im_2 <- predict(logistic_im_2, test[,c("District", "DayOfYear", "Weekday", "time_t", "Primary.Type")], type = "prob")
+
+binary_predictions_im_2 <- ifelse(pred_im_2[,2] >= 0.5, "true", "false")
+# create confusion matrix 
+confusionMatrix(as.factor(binary_predictions_im_2), test$Arrest,
+                mode = "everything",
+                positive="true")
+
+roc_2 <- pROC::roc(test$Arrest, pred_im_2[,2], levels = c("true", "false"),direction = ">")
+plot(roc_2, main = "ROC Curve", col = "blue", lwd = 2)
+
+auc_2 <- pROC::auc(roc_2)
+text(0.8, 0.2, paste("AUC =", round(auc_2, 3)), col = "blue", cex = 1.2)
+```
 
 
 
