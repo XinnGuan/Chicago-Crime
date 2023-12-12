@@ -441,15 +441,17 @@ text(0.8, 0.2, paste("AUC =", round(auc_1, 3)), col = "blue", cex = 1.2)
  - improvement of baseline 2
 
 ```{r}
-train$time_t <- asin(train$time/24)
-test$time_t <- asin(test$time/24)
+train$time_t <- train$time^2
+test$time_t <- test$time^2
+train$DayofYear_t <- train$DayofYear^2
+test$DayofYear_t <- test$DayofYear^2
 
-logistic_im_2 <- train(Arrest ~ District + DayofYear + weekday + time_t + Primary.Type, 
+logistic_im_2 <- train(Arrest ~ District + DayofYear_t + weekday + time_t + Primary.Type, 
                        data = train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
 
 # Cannot use `Time` - result in multicollineararity
 
-pred_im_2 <- predict(logistic_im_2, test[,c("District", "DayofYear", "weekday", "time_t", "Primary.Type")], type = "prob")
+pred_im_2 <- predict(logistic_im_2, test[,c("District", "DayofYear_t", "weekday", "time_t", "Primary.Type")], type = "prob")
 
 binary_predictions_im_2 <- ifelse(pred_im_2[,2] >= 0.5, "true", "false")
 # create confusion matrix 
