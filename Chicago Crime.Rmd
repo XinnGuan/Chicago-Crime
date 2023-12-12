@@ -59,10 +59,12 @@ data %<>%  na.omit()
 data$Primary.Type <- as.factor(data$Primary.Type)
 data$time <- as.numeric(data$time)
 data$District <- as.factor(data$District)
-data$Weekday <- as.factor(data$Weekday)
+data$weekday <- as.factor(data$weekday)
 
-data <- data %>% select(ID, Primary.Type, Arrest, District, time, DayOfYear, Weekday) %>% drop_na()
+data <- data %>% select(ID, Primary.Type, Arrest, District, time, DayofYear, weekday) %>% drop_na()
 ```
+
+
 ```{r}
 # Investigate of variables
 df_vis <- df
@@ -370,7 +372,7 @@ print(c(f2,f2_under,f2_over))
 
 ```{r}
 #use 80% of dataset as training set and 20% as test set 
-variables_to_convert <- c("Arrest", "Primary.Type", "WeekDay")
+variables_to_convert <- c("Arrest", "Primary.Type", "weekday")
 train <- data %>% dplyr::sample_frac(0.80)
 train[, variables_to_convert] <- lapply(train[, variables_to_convert], as.factor)
 test  <- dplyr::anti_join(data, train, by = 'ID')
@@ -390,12 +392,12 @@ ctrl <- trainControl(method = "cv", number = 5, summaryFunction = twoClassSummar
  - base
 
 ```{r}
-base_m <- train(Arrest ~ District + DayOfYear + time + Primary.Type, 
+base_m <- train(Arrest ~ District + DayofYear + time + Primary.Type, 
                 data = train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
 ```
 
 ```{r}
-pred <- predict(base_m, test[,c("District", "DayOfYear", "time", "Primary.Type")], type = "prob")
+pred <- predict(base_m, test[,c("District", "DayofYear", "time", "Primary.Type")], type = "prob")
 ```
 
 ```{r}
@@ -414,13 +416,13 @@ text(0.8, 0.2, paste("AUC =", round(auc_curve, 3)), col = "blue", cex = 1.2)
  - improvement of baseline 1
 
 ```{r}
-logistic_im_1 <- train(Arrest ~ District + DayOfYear + Weekday + time + Primary.Type, 
+logistic_im_1 <- train(Arrest ~ District + DayofYear + weekday + time + Primary.Type, 
                        data = train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
 
 # Cannot use `Time` - result in multicollineararity
 # DayOfMonth and Month 
 
-pred_im_1 <- predict(logistic_im_1, test[,c("District", "DayOfYear", "Weekday", "time", "Primary.Type")], type = "prob")
+pred_im_1 <- predict(logistic_im_1, test[,c("District", "DayofYear", "weekday", "time", "Primary.Type")], type = "prob")
 
 binary_predictions_im_1 <- ifelse(pred_im_1[,2] >= 0.5, "true", "false")
 # create confusion matrix 
@@ -442,12 +444,12 @@ text(0.8, 0.2, paste("AUC =", round(auc_1, 3)), col = "blue", cex = 1.2)
 train$time_t <- asin(train$time/24)
 test$time_t <- asin(test$time/24)
 
-logistic_im_2 <- train(Arrest ~ District + DayOfYear + Weekday + time_t + Primary.Type, 
+logistic_im_2 <- train(Arrest ~ District + DayofYear + weekday + time_t + Primary.Type, 
                        data = train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
 
 # Cannot use `Time` - result in multicollineararity
 
-pred_im_2 <- predict(logistic_im_2, test[,c("District", "DayOfYear", "Weekday", "time_t", "Primary.Type")], type = "prob")
+pred_im_2 <- predict(logistic_im_2, test[,c("District", "DayofYear", "weekday", "time_t", "Primary.Type")], type = "prob")
 
 binary_predictions_im_2 <- ifelse(pred_im_2[,2] >= 0.5, "true", "false")
 # create confusion matrix 
