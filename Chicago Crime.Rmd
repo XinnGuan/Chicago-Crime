@@ -6,6 +6,7 @@ output:
   pdf_document: default
   html_document: default
 ---
+
 ```{r}
 # Packages required
 library(lubridate)
@@ -18,8 +19,20 @@ library(pROC)
 library(MLmetrics)
 library(ROSE)
 library(knitr)
-library(sf)
+#library(sf)
 library(spatstat)
+
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(readr)
+library(e1071)
+library(doParallel)
+library(mltools)
+library(caret)
+library(kernlab)
+library(ROCR)
+library(data.table)
 ```
 
 ## Data Processing
@@ -30,6 +43,7 @@ df <- read.csv("OriginalData.csv")
 ```
 
 ### Processing variable 'Date'
+
 ```{r}
 data <- df %>% select(ID,Date, Primary.Type, Location.Description, Arrest, District)
 data %<>% filter(!Primary.Type %in% c("NON-CRIMINAL", "OTHER NARCOTIC VIOLATION", "PUBLIC INDECENCY", "HUMAN TRAFFICKING", "OBSCENITY"))
@@ -43,18 +57,20 @@ data %<>%
          weekday = weekdays(date))
 ```
 
-
-
 ### Processing missing data
+
 ```{r}
 colSums(is.na(data))
 ```
+
 We can see that the number of missing values for the variables `X.Coordinate`, `Y.Coordinate`, `Latitude`, and `Longtitude` are exactly the same, we can deduce that the coordinates are calculated from the latitude and longitude, so we don't need to include both pairs of location information. Also since the number of missing value is small compare to the number of data size, we will just eliminate the rows with missing values.
+
 ```{r}
 data %<>%  na.omit()
 ```
 
 ## Expalnatory Data Analysis
+
 ```{r}
 data$Primary.Type <- as.factor(data$Primary.Type)
 data$time <- as.numeric(data$time)
@@ -63,7 +79,6 @@ data$weekday <- as.factor(data$weekday)
 
 data <- data %>% select(ID, Primary.Type, Arrest, District, time, DayofYear, weekday) %>% drop_na()
 ```
-
 
 ```{r}
 # Investigate of variables
@@ -204,30 +219,21 @@ ggplot(crime_time_counts, aes(x = TimeOfDay, y = Primary.Type, fill = Count)) +
 
 ```
 
-
-
-
-
-
 ## Feature Selection
+
 Our first task is to predict whether arrest or not given time, location, and the crime type.
+
 ```{r}
 data %<>% filter(District != "31")
 sum(data$District=="31")
 ```
 
-
-
-
 ## Define Cross-validation
+
 ```{r}
 # Define a 5-fold cross validation
 ctrl <- trainControl(method = "cv", number = 5, summaryFunction = twoClassSummary, classProbs = TRUE)
 ```
-
-
-
-
 
 ## Imbalance Data Experiments with a Baseline Model
 
@@ -338,9 +344,11 @@ text(0.8, 0.1, paste("AUC =", round(pROC::auc(roc_curve_over), 3)), col = "green
 legend("bottomright", legend = c("Original", "Under-sampled", "Over-sampled"),
        col = c("blue", "red", "green"), lty = 1, lwd = 2)
 ```
+
 Given the current highly imbalanced nature of the data, the effectiveness of comparing models using the AUC curve diminishes. It's advisable to explore alternative evaluation metrics. The provided code below computes the F-$\beta$ score, an generalization of the F-1 score, the F-1 score is included in the output of `confusionMatrix()` function. The parameter $\beta \geq 0$ is the weight assigned to recall, in the case, we should choose $\beta>1$, so we prioritize the recall.
 
 ## F-beta Score
+
 ```{r}
 f_beta_score <- function(X, y, model, beta, threshold=0.5) {
   predictions <- predict(model, X, type = "prob")[,2]
@@ -364,10 +372,6 @@ f2_over <- f_beta_score(X=imbalanced_test[,c("District", "DayofYear", "time", "P
 print(c(f2,f2_under,f2_over))
 ```
 
-
-
-
-
 ## Train Test Split
 
 ```{r}
@@ -382,6 +386,7 @@ test %<>% select(-"ID")
 ```
 
 ## Predict Probability of Arrest
+
 ### Logistic Regression Model
 
 ```{r}
@@ -389,7 +394,7 @@ test %<>% select(-"ID")
 ctrl <- trainControl(method = "cv", number = 5, summaryFunction = twoClassSummary, classProbs = TRUE)
 ```
 
- - base
+-   base
 
 ```{r}
 base_m <- train(Arrest ~ District + DayofYear + time + Primary.Type, 
@@ -413,7 +418,7 @@ auc_curve <- pROC::auc(roc_curve)
 text(0.8, 0.2, paste("AUC =", round(auc_curve, 3)), col = "blue", cex = 1.2)
 ```
 
- - improvement of baseline 1
+-   improvement of baseline 1
 
 ```{r}
 logistic_im_1 <- train(Arrest ~ District + DayofYear + weekday + time + Primary.Type, 
@@ -438,7 +443,7 @@ text(0.8, 0.2, paste("AUC =", round(auc_1, 3)), col = "blue", cex = 1.2)
 
 ```
 
- - improvement of baseline 2
+-   improvement of baseline 2
 
 ```{r}
 train$time_t <- train$time^2
@@ -466,13 +471,160 @@ auc_2 <- pROC::auc(roc_2)
 text(0.8, 0.2, paste("AUC =", round(auc_2, 3)), col = "blue", cex = 1.2)
 ```
 
-
-
 ## Support Vector Machine
 
+Next, we use SVM to predict the outcome of a crime (arrest or no arrest) using the variables ``Primary.Type``, ``Disctrict``, ``time``, ``DayofYear`` and ``weekday``. As the relationship between outcome and variables is unclear, we use SVM with radial basis kernel. For SVM, the variables need to be one hot encoded.
+
+```{r}
+# One hot encode data
+data_svm <- data %>% select(-ID)
+data_svm <- as.data.table(data_svm)
+data_svm <- one_hot(data_svm)
+
+```
+
+Support Vector Machines (SVMs) face challenges with large datasets due to their cubic time complexity during training, making them computationally expensive as the dataset size increases. Additionally, SVMs often require storing the entire training dataset in memory, which can be impractical for large datasets, leading to reliance on disk storage and slowing down the training process. Furthermore, SVMs exhibit scalability issues, as the optimization problem they solve is quadratic in the number of samples, diminishing their efficiency for large-scale datasets. So for when fitting our models, we will use a random sample from our data set, using 3 types of sampling methods.
+
+1. Proportional sampling: this sampling methods generates a sample where the proportion of each classes emulates the original data set.
+
+We take 5% of the data to train our model on, keeping the class proportions as in the original data set and use it to fit the SVM.
+
+```{r}
+# Take proportional training sample 
+trainIndex <- createDataPartition(data_svm$Arrest, p = .05, list = TRUE)
+train <- data_svm[trainIndex$Resample,]
+train %>% dplyr::count(Arrest)
+
+```
 
 
+```{r}
+# CV seeds
+seeds <- vector(mode = "list", length = 6)
+for(i in 1:6) seeds[[i]] <- sample.int(n=1000, 3)
 
+# CV function
+control <- trainControl(method = 'cv', number = 5, allowParallel = TRUE, seeds=seeds)
+
+```
+
+
+```{r}
+# SVM with proportional sample
+cl <- makePSOCKcluster(detectCores() - 1)
+
+registerDoParallel(cl)
+
+svm.model <- train(Arrest ~ ., data = train, trControl = control, method = 'svmRadial', family = binomial(), allowParallel = TRUE)
+
+stopCluster(cl)
+
+```
+
+
+```{r}
+# Propotional test data
+sampIndex <- createDataPartition(data_svm$Arrest, p = .025, list = TRUE)
+
+test <- data_svm[sampIndex$Resample,]
+
+# Confusion matrix
+test$Arrest <- as.factor(test$Arrest)
+
+conf_matrix1 <- confusionMatrix(data = predict(svm.model, newdata = test), reference = test$Arrest, positive = 'true', mode = "everything")
+
+conf_matrix1
+```
+
+2. Downsampling : downsampling is a mechanism that reduces the count of training samples falling under the majority class, by randomly removing instances from the majority class until the class distribution is balanced. This method is straightforward but may discard potentially valuable information.
+
+```{r}
+# Down sample the dataset
+data_svm$Arrest = as.factor(data_svm$Arrest)
+
+down_sample <- downSample(x = data_svm, y = data_svm$Arrest)
+
+down_sample %>% count(Arrest)
+```
+
+```{r}
+# Take random tarining data from down sampled data
+trainIndexD <- createDataPartition(down_sample$Arrest, p = nrow(train)/nrow(down_sample), list = TRUE)
+
+train2 <- down_sample[trainIndexD$Resample,] %>% select(-Class)
+
+train2 %>% count(Arrest)
+
+```
+
+```{r}
+# Fit SVM using down sampling
+cl <- makePSOCKcluster(detectCores() - 1)
+
+registerDoParallel(cl)
+
+svm.model2 <- train(Arrest ~ ., data = train2, trControl = control, method = 'svmRadial', family = binomial(), allowParallel = TRUE)
+
+stopCluster(cl)
+
+```
+
+```{r}
+# Test data
+sampIndex <- createDataPartition(data_svm$Arrest, p = .025, list = TRUE)
+
+test <- data_svm[sampIndex$Resample,]
+
+# Confusion matrix
+test$Arrest <- as.factor(test$Arrest)
+
+conf_matrix2 <- confusionMatrix(data = predict(svm.model2, newdata = test), reference = test$Arrest, positive = 'true', mode = "everything")
+
+conf_matrix2
+```
+
+3. Upsampling: this is a technique used in machine learning to address imbalanced datasets. Upsampling involves increasing the number of instances in the minority class to balance it with the number of instances in the majority class by randomly duplicating instances from the minority class until the class distribution is balanced. This method may lead to overfitting since it replicates existing instances.
+
+
+```{r}
+# Generate up sampled dataset
+up_sample <- upSample(x = data_svm, y = data_svm$Arrest)
+
+up_sample %>% count(Arrest)
+
+# Up sampled training data
+trainIndexD <- createDataPartition(up_sample$Arrest, p = nrow(train)/nrow(up_sample), list = TRUE)
+
+train3 <- up_sample[trainIndexD$Resample,] %>% select(-Class)
+
+train3 %>% count(Arrest)
+
+```
+
+```{r}
+# Fit SVM with upsampling
+cl <- makePSOCKcluster(detectCores() - 1)
+
+registerDoParallel(cl)
+
+svm.model3 <- train(Arrest ~ ., data = train3, trControl = control, method = 'svmRadial', family = binomial(), allowParallel = TRUE)
+
+stopCluster(cl)
+
+# Test data
+
+sampIndex <- createDataPartition(data_svm$Arrest, p = .025, list = TRUE)
+
+test <- data_svm[sampIndex$Resample,]
+
+test$Arrest <- as.factor(test$Arrest)
+
+# Confucion matrix
+conf_matrix3 <- confusionMatrix(data = predict(svm.model3, newdata = test), reference = test$Arrest, positive = 'true', mode = "everything")
+
+conf_matrix3
+
+```
 
 
 ## Predict Number of Cases withing Radius of 5 km
@@ -527,5 +679,3 @@ points_within_buffer <- st_intersection(crime_sf, buffer)
 
 # Print
 ```
-
-
