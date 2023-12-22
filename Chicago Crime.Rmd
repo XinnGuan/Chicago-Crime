@@ -33,6 +33,8 @@ library(caret)
 library(kernlab)
 library(ROCR)
 library(data.table)
+
+library(geosphere)
 ```
 
 ## Data Processing
