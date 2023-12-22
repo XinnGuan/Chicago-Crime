@@ -679,3 +679,105 @@ points_within_buffer <- st_intersection(crime_sf, buffer)
 
 # Print
 ```
+
+
+## Separate dataset by month
+
+```{r}
+# Split the data into a list of data frames by month
+months_list <- split(data, data$month)
+# Access subsets using names, e.g., months_list$"01" for January
+```
+
+```{r}
+# Function to calculate distance in kilometers between two points
+calculate_distance <- function(lat1, lon1, lat2, lon2) {
+  distVincentySphere(c(lon1, lat1), c(lon2, lat2))
+}
+
+# Function to count points within a specified radius (in kilometers) of the data point
+count_points_within_radius <- function(subset_data, radius_km) {
+  counts <- sapply(1:nrow(subset_data), function(i) {
+    distances <- sapply(1:nrow(subset_data), function(j) {
+      calculate_distance(subset_data$Latitude[i], subset_data$Longitude[i],
+                         subset_data$Latitude[j], subset_data$Longitude[j])
+    })
+    sum(distances <= radius_km)
+  })
+  return(counts)
+}
+
+# Specify the radius of the circle (in kilometers)
+radius_km <- 5
+```
+
+## Count the crime number for January
+
+```{r}
+# Use the count_points_within_radius function on the January subset
+months_list$"01"$CountWithinRadius <- count_points_within_radius(months_list$"01", radius_km)
+data_Jan <- months_list$"01"
+```
+
+## Regression
+
+```{r}
+# Set the seed for reproducibility
+set.seed(123)
+
+# (70% train, 30% test)
+index <- createDataPartition(data_Jan$CountWithinRadius, p = 0.7, list = FALSE)
+
+# Split the data into training and testing sets
+Jan_train <- data_Jan[index, ]
+Jan_test <- data_Jan[-index, ]
+
+# Set up the control parameters
+Jan_ctrl <- trainControl(method = "cv", number = 10)
+
+# Perform cross-validation
+Jan_reg <- train(CountWithinRadius ~ Latitude + Longitude + Primary.Type, data = Jan_train, method = "lm", trControl = Jan_ctrl)
+
+# Print cross-validation results
+print(Jan_reg)
+
+# Predictions
+Jan_pre <- predict(Jan_reg, newdata = Jan_test)
+
+
+```
+
+## Analysis of the residuals / MAE MSE RMSE / pred values
+```{r}
+# Extract the residuals from the train object
+residuals <- residuals(Jan_reg)
+
+# Residuals vs. Fitted Values Plot
+plot(x = predict(Jan_reg), y = residuals, xlab = "Fitted Values", ylab = "Residuals", main = "Residuals vs. Fitted Values")
+
+# Add a horizontal line at y = 0 for reference
+abline(h = 0, col = "red", lty = 2)
+
+
+# Calculate evaluation metrics
+mae <- mean(abs(Jan_pre - Jan_test$CountWithinRadius))
+mse <- mean((Jan_pre - Jan_test$CountWithinRadius)^2)
+rmse <- sqrt(mse)
+
+# Print evaluation metrics
+print(paste("MAE:", mae))
+print(paste("MSE:", mse))
+print(paste("RMSE:", rmse))
+
+
+# Create a scatter plot of true vs. predicted values
+plot(Jan_test$CountWithinRadius, Jan_pre,
+     xlab = "True Values", ylab = "Predicted Values",
+     main = "True vs. Predicted Values", pch = 16)
+abline(0, 1, col = "red", lty = 2)  # Diagonal line for reference
+
+
+```
+
+Note that this is only for January, it will take a very long time to count the number of crimes that happened within the circle.
+
