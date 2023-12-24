@@ -781,5 +781,19 @@ abline(0, 1, col = "red", lty = 2)  # Diagonal line for reference
 
 ```
 
+
+```{r}
+data_Jan <- read.csv("data_Jan.csv")
+data_Jan <- read.csv("data_Feb.csv")
+data_Jan <- read.csv("data_Mar.csv")
+data_Jan <- read.csv("data_Apr.csv")
+data_Jan <- read.csv("data_May.csv")
+data_Jan <- read.csv("data_Jan.csv")
+```
+
+
+NOTES - Yuqi:
+
 Note that this is only for January, it will take a very long time to count the number of crimes that happened within the circle.
 
+Besides, since it takes about 4-5 hours to get the crime number within 5km in a particular month, here I also uploaded the datasets `data_Jan.csv` to `data_Jun.csv` (you can find it in `Github`, cuz I am going to the airport I stopped at the dataset in June), for you to perform regression (like linear regression or Poisson - I just tried `lm`).
