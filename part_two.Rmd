@@ -61,23 +61,23 @@ for (i in 1:nrow(data)) {
 
 ```{r}
 # Features and target variable
-features <- crime_sf_buffer[c('Longitude', 'Latitude')]  # Include relevant features
-target <- crime_sf_buffer$num_crimes_5km
+features <- data[c('Longitude', 'Latitude')]  # Include relevant features
+target <- data$points_within_5km
 
 # Split the data into training and testing sets
 set.seed(42)
-split_index <- sample(seq_len(nrow(crime_sf_buffer)), size = 0.8 * nrow(crime_sf_buffer))
-train_data <- crime_sf_buffer[split_index, ]
-test_data <- crime_sf_buffer[-split_index, ]
+split_index <- sample(seq_len(nrow(data)), size = 0.8 * nrow(data))
+train_data <- data[split_index, ]
+test_data <- data[-split_index, ]
 
 # Fit a linear regression model
-model <- lm(num_crimes_5km ~ feature1 + feature2 + ..., data = train_data)
+model <- lm(points_within_5km ~ Longitude + Latitude, data = train_data)
 
 # Make predictions on the test set
 predictions <- predict(model, newdata = test_data)
 
 # Evaluate the model
-mse <- mean((test_data$num_crimes_5km - predictions)^2)
+mse <- mean((test_data$points_within_5km - predictions)^2)
 print(paste("Mean Squared Error:", mse))
 
 ```
