@@ -631,56 +631,6 @@ conf_matrix3
 
 ## Predict Number of Cases withing Radius of 5 km
 
-```{r}
-crime_sf <- st_as_sf(Crime_data, coords = c("X.Coordinate", "Y.Coordinate"))
-#Convert your data to an sf object
-crime_pp <- as.ppp(crime_sf)
-#Create a point pattern object
-```
-
-```{r}
-center <- c(longitude = -87.68737, latitude = 41.80292)
-# Specify the radius in kilometers
-radius_km <- 5
-
-# Convert radius to degrees (approximate)
-radius_deg <- radius_km / 111.32  # 1 degree is approximately 111.32 kilometers
-
-# Create a bounding box around the center coordinate
-bbox <- st_bbox(st_buffer(st_point(c(center["longitude"], center["latitude"])), dist = radius_deg))
-
-# Subset points within the bounding box
-points_within_bbox <- st_within(crime_sf, bbox)
-
-# Calculate distances from the center and filter points within the radius
-distances <- st_distance(st_geometry(crime_sf), st_point(c(center["longitude"], center["latitude"])))
-points_within_radius <- crime_sf[distances <= radius_deg, ]
-
-# Print the result or use it as needed
-print(points_within_radius)
-```
-
-```{r}
-# Assuming you have a data frame named crime_data with columns Latitude and Longitude
-crime_sf <- st_as_sf(Crime_data, coords = c("Longitude", "Latitude"))
-
-# Specify the center coordinate (latitude and longitude)
-center <- c(longitude = -87.68737, latitude = 41.80292)
-
-# Specify the radius in kilometers
-radius_km <- 5
-
-# Convert radius to meters for more accurate distance calculations
-radius_meters <- radius_km * 1000
-
-# Create a circular buffer around the center point
-buffer <- st_buffer(st_point(c(center["longitude"], center["latitude"])), dist = radius_meters)
-
-# Subset points within the buffer
-points_within_buffer <- st_intersection(crime_sf, buffer)
-
-# Print
-```
 
 
 ## Separate dataset by month

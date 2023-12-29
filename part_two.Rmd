@@ -1,0 +1,83 @@
+---
+title: "part 2"
+output: html_document
+date: "2023-12-25"
+---
+```{r}
+library(dplyr)
+library(magrittr)
+library(tidyverse)
+```
+
+```{r}
+# Read data
+df <- read.csv("OriginalData.csv")
+```
+
+### Processing variable 'Date'
+
+```{r}
+data <- df %>% 
+  select(Date, Primary.Type, Longitude, Latitude)
+
+data %<>% 
+  filter(!Primary.Type %in% c("NON-CRIMINAL", "OTHER NARCOTIC VIOLATION", "PUBLIC INDECENCY", "HUMAN TRAFFICKING", "OBSCENITY"))
+
+data %<>% 
+  mutate(Date = as.POSIXct(Date, format = "%m/%d/%Y %I:%M:%S %p"),
+         month = format(as.Date(Date, format = "%m/%d/%Y"), "%m"))
+
+data %<>%  
+  na.omit()
+
+data %<>% filter(month=="01") %<>% filter(Primary.Type == "ROBBERY")
+```
+
+```{r}
+library(sf)
+library(sp)
+library(ggplot2)
+
+library(geosphere)
+
+```
+
+```{r}
+for (i in 1:nrow(data)) {
+  distances <- numeric(nrow(data))  # Initialize a vector to store distances for each point
+  
+  for (j in 1:nrow(data)) {
+    # Calculate distances between point i and all other points
+    distances[j] <- distGeo(c(data$Longitude[i], data$Latitude[i]),c(data$Longitude[j], data$Latitude[j]))
+  }
+  
+  # Store the distances in the data frame
+  data$points_within_5km[i] <- sum(distances <= 5000)
+}
+```
+
+
+
+
+```{r}
+# Features and target variable
+features <- crime_sf_buffer[c('Longitude', 'Latitude')]  # Include relevant features
+target <- crime_sf_buffer$num_crimes_5km
+
+# Split the data into training and testing sets
+set.seed(42)
+split_index <- sample(seq_len(nrow(crime_sf_buffer)), size = 0.8 * nrow(crime_sf_buffer))
+train_data <- crime_sf_buffer[split_index, ]
+test_data <- crime_sf_buffer[-split_index, ]
+
+# Fit a linear regression model
+model <- lm(num_crimes_5km ~ feature1 + feature2 + ..., data = train_data)
+
+# Make predictions on the test set
+predictions <- predict(model, newdata = test_data)
+
+# Evaluate the model
+mse <- mean((test_data$num_crimes_5km - predictions)^2)
+print(paste("Mean Squared Error:", mse))
+
+```
