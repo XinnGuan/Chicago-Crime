@@ -60,10 +60,6 @@ for (i in 1:nrow(data)) {
 
 
 ```{r}
-# Features and target variable
-features <- data[c('Longitude', 'Latitude')]  # Include relevant features
-target <- data$points_within_5km
-
 # Split the data into training and testing sets
 set.seed(42)
 split_index <- sample(seq_len(nrow(data)), size = 0.8 * nrow(data))
@@ -79,5 +75,20 @@ predictions <- predict(model, newdata = test_data)
 # Evaluate the model
 mse <- mean((test_data$points_within_5km - predictions)^2)
 print(paste("Mean Squared Error:", mse))
-
 ```
+
+```{r}
+# Specify the number of neighbors (k)
+k <- 3
+
+# Combine longitude and latitude into matrices
+train_coordinates <- cbind(train_data$Longitude, train_data$Latitude)
+test_coordinates <- cbind(test_data$Longitude, test_data$Latitude)
+
+# Use KNN for regression to predict the number of crimes on the test set
+predicted_crimes <- knn(train = train_coordinates, test = test_coordinates, cl = train_data$points_within_5km)
+# Evaluate the performance (you can use various regression metrics)
+rmse <- sqrt(mean(as.numeric(predicted_crimes) - test_data$points_within_5km)^2)
+print(paste("Root Mean Squared Error (RMSE):", rmse))
+```
+
