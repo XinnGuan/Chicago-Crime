@@ -88,7 +88,7 @@ test_coordinates <- cbind(test_data$Longitude, test_data$Latitude)
 # Use KNN for regression to predict the number of crimes on the test set
 predicted_crimes <- knn(train = train_coordinates, test = test_coordinates, cl = train_data$points_within_5km)
 # Evaluate the performance (you can use various regression metrics)
-rmse <- sqrt(mean(as.numeric(predicted_crimes) - test_data$points_within_5km)^2)
-print(paste("Root Mean Squared Error (RMSE):", rmse))
+mse <- mean((as.numeric(predicted_crimes) - test_data$points_within_5km)^2)
+print(paste(" Mean Squared Error (MSE):", mse))
 ```
 
