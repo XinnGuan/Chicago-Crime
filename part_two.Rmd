@@ -7,7 +7,13 @@ date: "2023-12-25"
 library(dplyr)
 library(magrittr)
 library(tidyverse)
+library(sf)
+library(sp)
+library(ggplot2)
+library(class)
+library(geosphere)
 ```
+
 
 ```{r}
 # Read data
@@ -33,14 +39,6 @@ data %<>%
 data %<>% filter(month=="01") %<>% filter(Primary.Type == "ROBBERY")
 ```
 
-```{r}
-library(sf)
-library(sp)
-library(ggplot2)
-
-library(geosphere)
-
-```
 
 ```{r}
 for (i in 1:nrow(data)) {
@@ -57,7 +55,31 @@ for (i in 1:nrow(data)) {
 ```
 
 
+```{r}
+calculate_points_within_5km <- function(data, target_month, target_crime_type) {
+   # Filter data based on specific inputs
+  data %<>% filter(month == target_month) %>% 
+    filter(Primary.Type == target_crime_type)
 
+  for (i in 1:nrow(data)) {
+  distances <- numeric(nrow(data))  # Initialize a vector to store distances for each point
+  
+  for (j in 1:nrow(data)) {
+    # Calculate distances between point i and all other points
+    distances[j] <- distGeo(c(data$Longitude[i], data$Latitude[i]),c(data$Longitude[j], data$Latitude[j]))
+  }
+  
+  # Store the distances in the data frame
+  data$points_within_5km[i] <- sum(distances <= 5000)
+  }
+  
+  
+  return(data)
+}
+
+```
+
+# Split training and test sets
 
 ```{r}
 # Split the data into training and testing sets
@@ -65,17 +87,56 @@ set.seed(42)
 split_index <- sample(seq_len(nrow(data)), size = 0.8 * nrow(data))
 train_data <- data[split_index, ]
 test_data <- data[-split_index, ]
+```
 
+# Linear Regression
+
+```{r}
+data_Jan_Rob <- calculate_points_within_5km(data, target_month = "01", target_crime_type = "ROBBERY")
+```
+
+```{r}
 # Fit a linear regression model
-model <- lm(points_within_5km ~ Longitude + Latitude, data = train_data)
+reg_Jan_Rob <- lm(points_within_5km ~ Longitude + Latitude, data = train_data)
 
 # Make predictions on the test set
-predictions <- predict(model, newdata = test_data)
-
-# Evaluate the model
-mse <- mean((test_data$points_within_5km - predictions)^2)
-print(paste("Mean Squared Error:", mse))
+pred_Jan_Rob <- predict(reg_Jan_Rob, newdata = test_data)
 ```
+
+```{r}
+# Evaluate the model
+mse <- mean((test_data$points_within_5km - pred_Jan_Rob)^2)
+mae <- mean(abs(test_data$points_within_5km - pred_Jan_Rob))
+rmse <- sqrt(mean((test_data$points_within_5km - pred_Jan_Rob)^2))
+rsquared <- 1 - (sum((test_data$points_within_5km - pred_Jan_Rob)^2) / sum((test_data$points_within_5km - mean(test_data$points_within_5km))^2))
+
+print(paste("Mean Squared Error:", mse))
+print(paste("Mean Absolute Error:", mae))
+print(paste("Root Mean Squared Error:", rmse))
+print(paste("R-squared:", rsquared))
+
+```
+
+```{r}
+# check assumptions
+par(mfrow = c(2, 2))
+plot(reg_Jan_Rob)
+
+# Plotting actual vs. predicted values
+dev.new()
+plot(test_data$points_within_5km, pred_Jan_Rob, main = "Actual vs. Predicted", xlab = "Actual", ylab = "Predicted")
+abline(0, 1, col = "red")  # Adding a line of equality
+
+```
+
+
+NOTES - Yuqi:
+The linear regression is not a good method due to the evaluation methods.
+Apart from the KNN method, I have also tried Time Series to predict, but I think it is not suitable for our data - it works better in a longer time period (say, 2010-2019, across more years) since the time window is `month`.
+
+In all, currently we only have the methods linear regression and KNN to help us predict the crime number.
+
+# KNN clustering
 
 ```{r}
 # Specify the number of neighbors (k)
