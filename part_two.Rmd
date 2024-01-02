@@ -35,23 +35,6 @@ data %<>%
 
 data %<>%  
   na.omit()
-
-data %<>% filter(month=="01") %<>% filter(Primary.Type == "ROBBERY")
-```
-
-
-```{r}
-for (i in 1:nrow(data)) {
-  distances <- numeric(nrow(data))  # Initialize a vector to store distances for each point
-  
-  for (j in 1:nrow(data)) {
-    # Calculate distances between point i and all other points
-    distances[j] <- distGeo(c(data$Longitude[i], data$Latitude[i]),c(data$Longitude[j], data$Latitude[j]))
-  }
-  
-  # Store the distances in the data frame
-  data$points_within_5km[i] <- sum(distances <= 5000)
-}
 ```
 
 
@@ -72,8 +55,6 @@ calculate_points_within_5km <- function(data, target_month, target_crime_type) {
   # Store the distances in the data frame
   data$points_within_5km[i] <- sum(distances <= 5000)
   }
-  
-  
   return(data)
 }
 
@@ -82,18 +63,20 @@ calculate_points_within_5km <- function(data, target_month, target_crime_type) {
 # Split training and test sets
 
 ```{r}
+data_Jan_Rob <- calculate_points_within_5km(data, target_month = "01", target_crime_type = "ROBBERY")
+```
+
+```{r}
 # Split the data into training and testing sets
 set.seed(42)
-split_index <- sample(seq_len(nrow(data)), size = 0.8 * nrow(data))
-train_data <- data[split_index, ]
-test_data <- data[-split_index, ]
+split_index <- sample(seq_len(nrow(data_Jan_Rob)), size = 0.8 * nrow(data_Jan_Rob))
+train_data <- data_Jan_Rob[split_index, ]
+test_data <- data_Jan_Rob[-split_index, ]
 ```
 
 # Linear Regression
 
-```{r}
-data_Jan_Rob <- calculate_points_within_5km(data, target_month = "01", target_crime_type = "ROBBERY")
-```
+
 
 ```{r}
 # Fit a linear regression model
