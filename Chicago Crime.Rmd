@@ -90,7 +90,7 @@ df_vis$newDate <- mdy_hms(df_vis$Date)
 df_vis$WeekDay <- weekdays(df_vis$newDate)
 df_vis$DayOfMonth <- day(df_vis$newDate)
 df_vis$DayOfYear <- yday(df_vis$newDate)
-df_vis$Month <- month(df_vis$newDate, label = TRUE, abbr = FALSE)
+df_vis$Month <- lubridate::month(df_vis$newDate, label = TRUE, abbr = FALSE)
 df_vis$TimeOfDay <- cut(
   hour(df_vis$newDate),
   breaks= c(-Inf, 5, 12, 17, 20, Inf),
@@ -240,6 +240,7 @@ ctrl <- trainControl(method = "cv", number = 5, summaryFunction = twoClassSummar
 ## Imbalance Data Experiments with a Baseline Model
 
 ```{r}
+set.seed(123)
 # Separate positive and negative classes
 true_class <- data %>% filter(Arrest == "true")
 false_class <- data %>% filter(Arrest == "false")
@@ -264,6 +265,7 @@ sum(downsampled_dataset[,"Arrest"]=="true")/dim(df)[1]
 ```
 
 ```{r}
+set.seed(123)
 #use 80% of dataset as training set and 20% as test set 
 variables_to_convert <- c("Arrest", "Primary.Type", "weekday")
 imbalanced_train <- downsampled_dataset %>% dplyr::sample_frac(0.80)
@@ -292,6 +294,7 @@ confusionMatrix(as.factor(binary_predictions), imbalanced_test$Arrest,
 ```
 
 ```{r}
+set.seed(123)
 #over sampling
 train_balanced_over <- ovun.sample(Arrest ~ District + DayofYear + time + 
     Primary.Type, data = imbalanced_train, method = "over")$data
@@ -345,6 +348,18 @@ text(0.8, 0.1, paste("AUC =", round(pROC::auc(roc_curve_over), 3)), col = "green
 
 legend("bottomright", legend = c("Original", "Under-sampled", "Over-sampled"),
        col = c("blue", "red", "green"), lty = 1, lwd = 2)
+```
+```{r}
+under_predictions <- ifelse(pred_under[,2] >= 0.5, "true", "false")
+# create confusion matrix 
+confusionMatrix(as.factor(under_predictions), imbalanced_test$Arrest,
+                mode = "everything",
+                positive="true")
+over_predictions <- ifelse(pred_over[,2] >= 0.5, "true", "false")
+# create confusion matrix 
+confusionMatrix(as.factor(over_predictions), imbalanced_test$Arrest,
+                mode = "everything",
+                positive="true")
 ```
 
 Given the current highly imbalanced nature of the data, the effectiveness of comparing models using the AUC curve diminishes. It's advisable to explore alternative evaluation metrics. The provided code below computes the F-$\beta$ score, an generalization of the F-1 score, the F-1 score is included in the output of `confusionMatrix()` function. The parameter $\beta \geq 0$ is the weight assigned to recall, in the case, we should choose $\beta>1$, so we prioritize the recall.
