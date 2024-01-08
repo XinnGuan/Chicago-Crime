@@ -762,3 +762,117 @@ NOTES - Yuqi:
 Note that this is only for January, it will take a very long time to count the number of crimes that happened within the circle.
 
 Besides, since it takes about 4-5 hours to get the crime number within 5km in a particular month, here I also uploaded the datasets `data_Jan.csv` to `data_Jun.csv` (you can find it in `Github`, cuz I am going to the airport I stopped at the dataset in June), for you to perform regression (like linear regression or Poisson - I just tried `lm`).
+
+
+## Question 2
+
+
+### Processing variable 'Date'
+
+```{r}
+data2 <- df %>% 
+  select(Date, Primary.Type, Longitude, Latitude)
+
+data2 %<>% 
+  filter(!Primary.Type %in% c("NON-CRIMINAL", "OTHER NARCOTIC VIOLATION", "PUBLIC INDECENCY", "HUMAN TRAFFICKING", "OBSCENITY"))
+
+data2 %<>% 
+  mutate(Date = as.POSIXct(Date, format = "%m/%d/%Y %I:%M:%S %p"),
+         month = format(as.Date(Date, format = "%m/%d/%Y"), "%m"))
+
+data2 %<>%  
+  na.omit()
+```
+
+
+```{r}
+calculate_points_within_5km <- function(data, target_month, target_crime_type) {
+   # Filter data based on specific inputs
+  data %<>% filter(month == target_month) %>% 
+    filter(Primary.Type == target_crime_type)
+
+  for (i in 1:nrow(data)) {
+  distances <- numeric(nrow(data))  # Initialize a vector to store distances for each point
+  
+  for (j in 1:nrow(data)) {
+    # Calculate distances between point i and all other points
+    distances[j] <- distGeo(c(data$Longitude[i], data$Latitude[i]),c(data$Longitude[j], data$Latitude[j]))
+  }
+  
+  # Store the distances in the data frame
+  data$points_within_5km[i] <- sum(distances <= 5000)
+  }
+  return(data)
+}
+
+```
+
+# Split training and test sets
+
+```{r}
+data_Jan_Rob <- calculate_points_within_5km(data2, target_month = "01", target_crime_type = "ROBBERY")
+```
+
+```{r}
+# Split the data into training and testing sets
+set.seed(42)
+split_index <- sample(seq_len(nrow(data_Jan_Rob)), size = 0.8 * nrow(data_Jan_Rob))
+train_data <- data_Jan_Rob[split_index, ]
+test_data <- data_Jan_Rob[-split_index, ]
+```
+
+# Linear Regression
+
+
+
+```{r}
+# Fit a linear regression model
+reg_Jan_Rob <- lm(points_within_5km ~ Longitude + Latitude, data = train_data)
+
+# Make predictions on the test set
+pred_Jan_Rob <- predict(reg_Jan_Rob, newdata = test_data)
+```
+
+```{r}
+# Evaluate the model
+mse <- mean((test_data$points_within_5km - pred_Jan_Rob)^2)
+mae <- mean(abs(test_data$points_within_5km - pred_Jan_Rob))
+rmse <- sqrt(mean((test_data$points_within_5km - pred_Jan_Rob)^2))
+rsquared <- 1 - (sum((test_data$points_within_5km - pred_Jan_Rob)^2) / sum((test_data$points_within_5km - mean(test_data$points_within_5km))^2))
+
+print(paste("Mean Squared Error:", mse))
+print(paste("Mean Absolute Error:", mae))
+print(paste("Root Mean Squared Error:", rmse))
+print(paste("R-squared:", rsquared))
+
+```
+
+```{r}
+# check assumptions
+par(mfrow = c(2, 2))
+plot(reg_Jan_Rob)
+
+# Plotting actual vs. predicted values
+dev.new()
+plot(test_data$points_within_5km, pred_Jan_Rob, main = "Actual vs. Predicted", xlab = "Actual", ylab = "Predicted")
+abline(0, 1, col = "red")  # Adding a line of equality
+```
+
+
+# KNN clustering
+
+```{r}
+# Specify the number of neighbors (k)
+k <- 3
+
+# Combine longitude and latitude into matrices
+train_coordinates <- cbind(train_data$Longitude, train_data$Latitude)
+test_coordinates <- cbind(test_data$Longitude, test_data$Latitude)
+
+# Use KNN for regression to predict the number of crimes on the test set
+predicted_crimes <- knn(train = train_coordinates, test = test_coordinates, cl = train_data$points_within_5km)
+# Evaluate the performance (you can use various regression metrics)
+mse <- mean((as.numeric(predicted_crimes) - test_data$points_within_5km)^2)
+print(paste(" Mean Squared Error (MSE):", mse))
+```
+
