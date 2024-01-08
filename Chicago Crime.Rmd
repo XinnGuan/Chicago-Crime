@@ -34,6 +34,9 @@ library(kernlab)
 library(ROCR)
 library(data.table)
 
+library(DescTools)
+library(scales)
+
 library(geosphere)
 ```
 
@@ -490,7 +493,7 @@ text(0.8, 0.2, paste("AUC =", round(auc_2, 3)), col = "blue", cex = 1.2)
 
 ## Support Vector Machine
 
-Next, we use SVM to predict the outcome of a crime (arrest or no arrest) using the variables ``Primary.Type``, ``Disctrict``, ``time``, ``DayofYear`` and ``weekday``. As the relationship between outcome and variables is unclear, we use SVM with radial basis kernel. For SVM, the variables need to be one hot encoded.
+Next, we use SVM to predict the outcome of a crime (arrest or no arrest) using the variables ``Primary.Type``, ``Disctrict``, ``time``, ``DayofYear`` and ``weekday``. As the relationship between outcome and variables is unclear, we use SVM with radial basis kernel. For SVM, the variables need to be one hot encoded. We also drop the variable ``DayofYear``.
 
 ```{r}
 # One hot encode data
@@ -499,7 +502,7 @@ data_svm <- as.data.table(data_svm)
 data_svm <- one_hot(data_svm)
 ```
 
-Support Vector Machines (SVMs) face challenges with large datasets due to their cubic time complexity during training, making them computationally expensive as the dataset size increases. Additionally, SVMs often require storing the entire training dataset in memory, which can be impractical for large datasets, leading to reliance on disk storage and slowing down the training process. Furthermore, SVMs exhibit scalability issues, as the optimization problem they solve is quadratic in the number of samples, diminishing their efficiency for large-scale datasets. So for when fitting our models, we will use a random sample from our data set, using 3 types of sampling methods.
+Support Vector Machines (SVMs) face challenges with large datasets due to their cubic time complexity during training, making them computationally expensive as the dataset size increases. Additionally, SVMs often require storing the entire training dataset in memory, which can be impractical for large datasets, leading to reliance on disk storage and slowing down the training process. Furthermore, SVMs exhibit scalability issues, as the optimization problem they solve is quadratic in the number of samples, diminishing their efficiency for large-scale datasets. So when fitting our models, we will use a random sample from our data set, using 3 types of sampling methods.
 
 1. Proportional sampling: this sampling methods generates a sample where the proportion of each classes emulates the original data set.
 
@@ -552,7 +555,7 @@ conf_matrix1 <- confusionMatrix(data = predict(svm.model, newdata = test), refer
 conf_matrix1
 ```
 
-2. Downsampling : downsampling is a mechanism that reduces the count of training samples falling under the majority class, by randomly removing instances from the majority class until the class distribution is balanced. This method is straightforward but may discard potentially valuable information.
+2. Downsampling : downsampling is a mechanism that reduces the count of training samples falling under the majority class, by randomly removing instances from the majority class until the class distribution is balanced. This method is straightforward but may discard potentially valuable information. We make sure that the model is trained using a random sample which is the same size as the sample used to fit the model before. 
 
 ```{r}
 # Down sample the dataset
@@ -600,8 +603,7 @@ conf_matrix2
 ```
 
 
-3. Upsampling: this is a technique used in machine learning to address imbalanced datasets. Upsampling involves increasing the number of instances in the minority class to balance it with the number of instances in the majority class by randomly duplicating instances from the minority class until the class distribution is balanced. This method may lead to overfitting since it replicates existing instances.
-
+3. Upsampling: this is a technique used in machine learning to address imbalanced datasets. Upsampling involves increasing the number of instances in the minority class to balance it with the number of instances in the majority class by randomly duplicating instances from the minority class until the class distribution is balanced. This method may lead to overfitting since it replicates existing instances. Again, we make sure that the model is trained using a random sample which is the same size as the samples used to fit the models before. 
 
 ```{r}
 # Generate up sampled dataset
@@ -643,20 +645,67 @@ conf_matrix3
 
 ```
 
-```{r}
-
-D = 5173
-C = 616
-B = 981
-A = 1069
-
-BinomCI(A, A+C)
-```
+We want to present the results from all 3 models below. We plot the sensitivities, specificities and for a single, combined accuracy measure, the F1 scores, and their corresponding 95% confidence intervals. 
 
 ```{r}
+D = conf_matrix1$table[1,1]
+C = conf_matrix1$table[1,2]
+B = conf_matrix1$table[2,1]
+A = conf_matrix1$table[2,2]
 
+accuracy_table <- data.frame() 
+
+accuracy_table <- rbind(accuracy_table,cbind("model 1", "sens",BinomCI(A, A+C)))
+accuracy_table <- rbind(accuracy_table,cbind("model 1", "spec",BinomCI(D, B+D)))
+accuracy_table <- rbind(accuracy_table,cbind("model 1", "F1",BinomCI(A,A+B/2+C/2)))
+
+D = conf_matrix2$table[1,1]
+C = conf_matrix2$table[1,2]
+B = conf_matrix2$table[2,1]
+A = conf_matrix2$table[2,2]
+
+accuracy_table <- rbind(accuracy_table,cbind("model 2", "sens",BinomCI(A, A+C)))
+accuracy_table <- rbind(accuracy_table,cbind("model 2", "spec",BinomCI(D, B+D)))
+accuracy_table <- rbind(accuracy_table,cbind("model 2", "F1",BinomCI(A,A+B/2+C/2)))
+
+D = conf_matrix3$table[1,1]
+C = conf_matrix3$table[1,2]
+B = conf_matrix3$table[2,1]
+A = conf_matrix3$table[2,2]
+
+accuracy_table <- rbind(accuracy_table,cbind("model 3", "sens",BinomCI(A, A+C)))
+accuracy_table <- rbind(accuracy_table,cbind("model 3", "spec",BinomCI(D, B+D)))
+accuracy_table <- rbind(accuracy_table,cbind("model 3", "F1",BinomCI(A,A+B/2+C/2)))
+
+
+
+colnames(accuracy_table) <- c("model", "type", "est", "lwr", "upr")
+
+accuracy_table$est <- as.numeric(accuracy_table$est)
+accuracy_table$lwr <- as.numeric(accuracy_table$lwr)
+accuracy_table$upr <- as.numeric(accuracy_table$upr)
+
+accuracy_table %>% group_by(type) %>% 
+  ggplot(aes(x = type,y = est, color = type)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = lwr, ymax = upr)) +
+  facet_grid(cols = vars(model)) + 
+  ylab("") + 
+  xlab("Score type") +
+  scale_y_continuous(n.breaks = 10) + 
+  theme_minimal()
+  
 ```
 
+In the assessment of three SVM models on the Chicago crime dataset, Models 2 and 3 are meant to deal with the challenges of unbalanced training data using downsampling and upsampling. Model 2 achieves a sensitivity of 63.92% and a specificity of 84.08%, while Model 3 achieves very similar metrics with a sensitivity of 63.44% and a specificity of 84.06%. 
+
+Conversely, Model 1 demonstrates outstanding specificity at 98.12% but at the cost of poor sensitivity (44.27%). This is due to the fact that with Model 1, we used a proportional sample where the negatives outweight the positives, so in this model negative outcomes dominate. The high specificity of this model suggests that it makes very few false positive predictions, but that is because it makes few positive predictions overall. 
+
+The choice between these models depends on the cost considerations associated with false positives and false negatives. If the priority is to minimize false positives, especially when the cost is high, Model 1 is a strong candidate due to its exceptional specificity. Alternatively, if capturing arrests is crucial and the cost of false negatives is significant, Models 2 or 3 would be the preferred choice with their superior sensitivity.
+
+Examining the F1 score, a metric that balances precision and recall, all three models exhibit nearly identical performance. Model 1 achieves an F1 score of 58.58%, Model 2 with 57.56%, and Model 3 with 57.24%. However, Models 2 and 3 show slightly narrower intervals for the F1 scores compared to Model 1, suggesting a higher degree of confidence in the F1 scores for Models 2 and 3. 
+
+In conclusion, the implemented downsampling in Model 2 and upsampling in Model 3 have contributed to some improvements in addressing the challenges of unbalanced training data in the dataset. While these sampling techniques have led to more balanced sensitivities and specificities, the models' overall performance remains very similar to the performance of Model 1, where we used a proportional sample.
 
 
 
