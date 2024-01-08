@@ -494,34 +494,33 @@ Next, we use SVM to predict the outcome of a crime (arrest or no arrest) using t
 
 ```{r}
 # One hot encode data
-data_svm <- data %>% select(-ID)
+data_svm <- data %>% select(-c(ID,DayofYear))
 data_svm <- as.data.table(data_svm)
 data_svm <- one_hot(data_svm)
-
 ```
 
 Support Vector Machines (SVMs) face challenges with large datasets due to their cubic time complexity during training, making them computationally expensive as the dataset size increases. Additionally, SVMs often require storing the entire training dataset in memory, which can be impractical for large datasets, leading to reliance on disk storage and slowing down the training process. Furthermore, SVMs exhibit scalability issues, as the optimization problem they solve is quadratic in the number of samples, diminishing their efficiency for large-scale datasets. So for when fitting our models, we will use a random sample from our data set, using 3 types of sampling methods.
 
 1. Proportional sampling: this sampling methods generates a sample where the proportion of each classes emulates the original data set.
 
-We take 5% of the data to train our model on, keeping the class proportions as in the original data set and use it to fit the SVM.
+We take 6% of the data to train our model on, keeping the class proportions as in the original data set and use it to fit the SVM.
 
 ```{r}
 # Take proportional training sample 
-trainIndex <- createDataPartition(data_svm$Arrest, p = .05, list = TRUE)
-train <- data_svm[trainIndex$Resample,]
+index <- createDataPartition(data_svm$Arrest, p = .06, list = TRUE)
+train <- data_svm[index$Resample,]
 train %>% dplyr::count(Arrest)
-
 ```
 
 
 ```{r}
 # CV seeds
-seeds <- vector(mode = "list", length = 6)
-for(i in 1:6) seeds[[i]] <- sample.int(n=1000, 3)
+seeds <- vector(mode = "list", length = 5)
+for(i in 1:5) {
+  seeds[[i]] <- sample.int(n = 1000, 3) }
 
-# CV function
-control <- trainControl(method = 'cv', number = 5, allowParallel = TRUE, seeds=seeds)
+# CV function with 4-fold cross-validation
+control <- trainControl(method = 'cv', number = 4, allowParallel = TRUE, seeds = seeds)
 
 ```
 
@@ -540,10 +539,10 @@ stopCluster(cl)
 
 
 ```{r}
-# Propotional test data
-sampIndex <- createDataPartition(data_svm$Arrest, p = .025, list = TRUE)
+# Test data
+index <- createDataPartition(data_svm$Arrest, p = .03, list = TRUE)
 
-test <- data_svm[sampIndex$Resample,]
+test <- data_svm[index$Resample,]
 
 # Confusion matrix
 test$Arrest <- as.factor(test$Arrest)
@@ -566,9 +565,9 @@ down_sample %>% count(Arrest)
 
 ```{r}
 # Take random tarining data from down sampled data
-trainIndexD <- createDataPartition(down_sample$Arrest, p = nrow(train)/nrow(down_sample), list = TRUE)
+index <- createDataPartition(down_sample$Arrest, p = nrow(train)/nrow(down_sample), list = TRUE)
 
-train2 <- down_sample[trainIndexD$Resample,] %>% select(-Class)
+train2 <- down_sample[index$Resample,] %>% select(-Class)
 
 train2 %>% count(Arrest)
 
@@ -588,9 +587,9 @@ stopCluster(cl)
 
 ```{r}
 # Test data
-sampIndex <- createDataPartition(data_svm$Arrest, p = .025, list = TRUE)
+index <- createDataPartition(data_svm$Arrest, p = .03, list = TRUE)
 
-test <- data_svm[sampIndex$Resample,]
+test <- data_svm[index$Resample,]
 
 # Confusion matrix
 test$Arrest <- as.factor(test$Arrest)
@@ -599,6 +598,7 @@ conf_matrix2 <- confusionMatrix(data = predict(svm.model2, newdata = test), refe
 
 conf_matrix2
 ```
+
 
 3. Upsampling: this is a technique used in machine learning to address imbalanced datasets. Upsampling involves increasing the number of instances in the minority class to balance it with the number of instances in the majority class by randomly duplicating instances from the minority class until the class distribution is balanced. This method may lead to overfitting since it replicates existing instances.
 
@@ -610,9 +610,9 @@ up_sample <- upSample(x = data_svm, y = data_svm$Arrest)
 up_sample %>% count(Arrest)
 
 # Up sampled training data
-trainIndexD <- createDataPartition(up_sample$Arrest, p = nrow(train)/nrow(up_sample), list = TRUE)
+index <- createDataPartition(up_sample$Arrest, p = nrow(train)/nrow(up_sample), list = TRUE)
 
-train3 <- up_sample[trainIndexD$Resample,] %>% select(-Class)
+train3 <- up_sample[index$Resample,] %>% select(-Class)
 
 train3 %>% count(Arrest)
 
@@ -630,9 +630,9 @@ stopCluster(cl)
 
 # Test data
 
-sampIndex <- createDataPartition(data_svm$Arrest, p = .025, list = TRUE)
+index <- createDataPartition(data_svm$Arrest, p = .03, list = TRUE)
 
-test <- data_svm[sampIndex$Resample,]
+test <- data_svm[index$Resample,]
 
 test$Arrest <- as.factor(test$Arrest)
 
@@ -642,6 +642,22 @@ conf_matrix3 <- confusionMatrix(data = predict(svm.model3, newdata = test), refe
 conf_matrix3
 
 ```
+
+```{r}
+
+D = 5173
+C = 616
+B = 981
+A = 1069
+
+BinomCI(A, A+C)
+```
+
+```{r}
+
+```
+
+
 
 
 ## Predict Number of Cases withing Radius of 5 km

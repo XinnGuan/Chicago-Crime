@@ -55,6 +55,11 @@ data <- one_hot(data)
 ```
 
 
+```{r}
+summary(data)
+```
+
+
 Fisrt: svm with radial basis kernel as the relationship between outcome and variables is unclear. 
 
 SVMs have a training time complexity that is roughly cubic in the number of data points. As the dataset size increases, the time required for training also increases rapidly. This makes SVMs computationally expensive for large datasets.
@@ -88,6 +93,7 @@ train %>% dplyr::count(Arrest)
 #Create Seeds for the Cross Validation Function
 seeds <- vector(mode = "list", length = 6)
 for(i in 1:6) seeds[[i]] <- sample.int(n=1000, 3)
+
 #Define Cross Validation Function
 control <- trainControl(method = 'cv', number = 5, allowParallel = TRUE, seeds=seeds)
 
