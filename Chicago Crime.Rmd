@@ -809,17 +809,47 @@ abline(0, 1, col = "red")  # Adding a line of equality
 ### KNN clustering
 
 ```{r}
-# Specify the number of neighbors (k)
-k <- 3
-
 # Combine longitude and latitude into matrices
 train_coordinates <- cbind(train_data$Longitude, train_data$Latitude)
 test_coordinates <- cbind(test_data$Longitude, test_data$Latitude)
 
 # Use KNN for regression to predict the number of crimes on the test set
-predicted_crimes <- knn(train = train_coordinates, test = test_coordinates, cl = train_data$points_within_5km)
+predicted_crimes1 <- knn(train = train_coordinates, test = test_coordinates, cl = train_data$points_within_5km, k = 1)
 # Evaluate the performance (you can use various regression metrics)
-mse <- mean((as.numeric(predicted_crimes) - test_data$points_within_5km)^2)
-print(paste(" Mean Squared Error (MSE):", mse))
+mse1 <- mean((as.numeric(predicted_crimes1) - test_data$points_within_5km)^2)
+print(paste(" Mean Squared Error (MSE):", mse1))
+```
+
+```{r}
+# Combine longitude and latitude into matrices
+train_coordinates <- cbind(train_data$Longitude, train_data$Latitude)
+test_coordinates <- cbind(test_data$Longitude, test_data$Latitude)
+
+# Use KNN for regression to predict the number of crimes on the test set
+predicted_crimes3 <- knn(train = train_coordinates, test = test_coordinates, cl = train_data$points_within_5km, k =3)
+# Evaluate the performance (you can use various regression metrics)
+mse3 <- mean((as.numeric(predicted_crimes3) - test_data$points_within_5km)^2)
+print(paste(" Mean Squared Error (MSE):", mse3))
+```
+
+```{r}
+# Set a range of k values
+k_values <- c(1, 3, 5, 7, 9, 11, 13, 15)
+
+# Initialize an empty vector to store MSE values
+mse_values <- numeric(length(k_values))
+
+# Loop through different k values
+for (i in 1:length(k_values)) {
+  # Use KNN for regression to predict the number of crimes on the test set
+  predicted_crimes <- knn(train = train_coordinates, test = test_coordinates, cl = train_data$points_within_5km, k = k_values[i])
+  
+  # Evaluate the performance (you can use various regression metrics)
+  mse_values[i] <- mean((as.numeric(predicted_crimes) - test_data$points_within_5km)^2)
+}
+
+# Plot the MSE values for different k
+plot(k_values, mse_values, type = "b", main = "MSE for Different k Values", xlab = "k", ylab = "Mean Squared Error")
+
 ```
 
