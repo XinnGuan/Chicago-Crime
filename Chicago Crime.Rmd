@@ -733,7 +733,7 @@ data2 %<>%
 
 
 ```{r}
-calculate_points_within_5km <- function(data, target_month, target_crime_type) {
+calculate_crimes_within_5km <- function(data, target_month, target_crime_type) {
    # Filter data based on specific inputs
   data %<>% filter(month == target_month) %>% 
     filter(Primary.Type == target_crime_type)
@@ -747,7 +747,7 @@ calculate_points_within_5km <- function(data, target_month, target_crime_type) {
   }
   
   # Store the distances in the data frame
-  data$points_within_5km[i] <- sum(distances <= 5000)
+  data$crimes_within_5km[i] <- sum(distances <= 5000)
   }
   return(data)
 }
@@ -757,7 +757,7 @@ calculate_points_within_5km <- function(data, target_month, target_crime_type) {
 # Split training and test sets
 
 ```{r}
-data_Jan_Rob <- calculate_points_within_5km(data2, target_month = "01", target_crime_type = "ROBBERY")
+data_Jan_Rob <- calculate_crimes_within_5km(data2, target_month = "01", target_crime_type = "ROBBERY")
 ```
 
 ```{r}
@@ -774,7 +774,7 @@ test_data <- data_Jan_Rob[-split_index, ]
 
 ```{r}
 # Fit a linear regression model
-reg_Jan_Rob <- lm(points_within_5km ~ Longitude + Latitude, data = train_data)
+reg_Jan_Rob <- lm(crimes_within_5km ~ Longitude + Latitude, data = train_data)
 
 # Make predictions on the test set
 pred_Jan_Rob <- predict(reg_Jan_Rob, newdata = test_data)
@@ -782,10 +782,10 @@ pred_Jan_Rob <- predict(reg_Jan_Rob, newdata = test_data)
 
 ```{r}
 # Evaluate the model
-mse <- mean((test_data$points_within_5km - pred_Jan_Rob)^2)
-mae <- mean(abs(test_data$points_within_5km - pred_Jan_Rob))
-rmse <- sqrt(mean((test_data$points_within_5km - pred_Jan_Rob)^2))
-rsquared <- 1 - (sum((test_data$points_within_5km - pred_Jan_Rob)^2) / sum((test_data$points_within_5km - mean(test_data$points_within_5km))^2))
+mse <- mean((test_data$crimes_within_5km - pred_Jan_Rob)^2)
+mae <- mean(abs(test_data$crimes_within_5km - pred_Jan_Rob))
+rmse <- sqrt(mean((test_data$crimes_within_5km - pred_Jan_Rob)^2))
+rsquared <- 1 - (sum((test_data$crimes_within_5km - pred_Jan_Rob)^2) / sum((test_data$crimes_within_5km - mean(test_data$crimes_within_5km))^2))
 
 print(paste("Mean Squared Error:", mse))
 print(paste("Mean Absolute Error:", mae))
@@ -801,7 +801,7 @@ plot(reg_Jan_Rob)
 
 # Plotting actual vs. predicted values
 dev.new()
-plot(test_data$points_within_5km, pred_Jan_Rob, main = "Actual vs. Predicted", xlab = "Actual", ylab = "Predicted")
+plot(test_data$crimes_within_5km, pred_Jan_Rob, main = "Actual vs. Predicted", xlab = "Actual", ylab = "Predicted")
 abline(0, 1, col = "red")  # Adding a line of equality
 ```
 
@@ -814,9 +814,9 @@ train_coordinates <- cbind(train_data$Longitude, train_data$Latitude)
 test_coordinates <- cbind(test_data$Longitude, test_data$Latitude)
 
 # Use KNN for regression to predict the number of crimes on the test set
-predicted_crimes1 <- knn(train = train_coordinates, test = test_coordinates, cl = train_data$points_within_5km, k = 1)
+predicted_crimes1 <- knn(train = train_coordinates, test = test_coordinates, cl = train_data$crimes_within_5km, k = 1)
 # Evaluate the performance (you can use various regression metrics)
-mse1 <- mean((as.numeric(predicted_crimes1) - test_data$points_within_5km)^2)
+mse1 <- mean((as.numeric(predicted_crimes1) - test_data$crimes_within_5km)^2)
 print(paste(" Mean Squared Error (MSE):", mse1))
 ```
 
@@ -826,9 +826,9 @@ train_coordinates <- cbind(train_data$Longitude, train_data$Latitude)
 test_coordinates <- cbind(test_data$Longitude, test_data$Latitude)
 
 # Use KNN for regression to predict the number of crimes on the test set
-predicted_crimes3 <- knn(train = train_coordinates, test = test_coordinates, cl = train_data$points_within_5km, k =3)
+predicted_crimes3 <- knn(train = train_coordinates, test = test_coordinates, cl = train_data$crimes_within_5km, k =3)
 # Evaluate the performance (you can use various regression metrics)
-mse3 <- mean((as.numeric(predicted_crimes3) - test_data$points_within_5km)^2)
+mse3 <- mean((as.numeric(predicted_crimes3) - test_data$crimes_within_5km)^2)
 print(paste(" Mean Squared Error (MSE):", mse3))
 ```
 
@@ -842,10 +842,10 @@ mse_values <- numeric(length(k_values))
 # Loop through different k values
 for (i in 1:length(k_values)) {
   # Use KNN for regression to predict the number of crimes on the test set
-  predicted_crimes <- knn(train = train_coordinates, test = test_coordinates, cl = train_data$points_within_5km, k = k_values[i])
+  predicted_crimes <- knn(train = train_coordinates, test = test_coordinates, cl = train_data$crimes_within_5km, k = k_values[i])
   
   # Evaluate the performance (you can use various regression metrics)
-  mse_values[i] <- mean((as.numeric(predicted_crimes) - test_data$points_within_5km)^2)
+  mse_values[i] <- mean((as.numeric(predicted_crimes) - test_data$crimes_within_5km)^2)
 }
 
 # Plot the MSE values for different k
