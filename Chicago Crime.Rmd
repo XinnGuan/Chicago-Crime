@@ -160,7 +160,6 @@ ggplot(df_vis, aes(x = DayOfYear, fill = DayOfYear)) +
        y = "Number of Arrests") +
   theme_minimal()
 
-
 # TimeOfDay
 arrests_by_TimeOfDay <- df_vis %>%
   group_by(TimeOfDay) %>%
@@ -221,7 +220,6 @@ ggplot(crime_time_counts, aes(x = TimeOfDay, y = Primary.Type, fill = Count)) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         legend.position = "right")
-
 ```
 
 ## Feature Selection
@@ -602,7 +600,6 @@ conf_matrix2 <- confusionMatrix(data = predict(svm.model2, newdata = test), refe
 conf_matrix2
 ```
 
-
 3. Upsampling: this is a technique used in machine learning to address imbalanced datasets. Upsampling involves increasing the number of instances in the minority class to balance it with the number of instances in the majority class by randomly duplicating instances from the minority class until the class distribution is balanced. This method may lead to overfitting since it replicates existing instances. Again, we make sure that the model is trained using a random sample which is the same size as the samples used to fit the models before. 
 
 ```{r}
@@ -644,7 +641,6 @@ conf_matrix3 <- confusionMatrix(data = predict(svm.model3, newdata = test), refe
 conf_matrix3
 
 ```
-
 
 We want to present the results from all 3 models below. We plot the sensitivities, specificities and for a single, combined accuracy measure, the F1 scores, and their corresponding 95% confidence intervals. 
 
@@ -770,8 +766,6 @@ test_data <- data_Jan_Rob[-split_index, ]
 
 ### Linear Regression
 
-
-
 ```{r}
 # Fit a linear regression model
 reg_Jan_Rob <- lm(crimes_within_5km ~ Longitude + Latitude, data = train_data)
@@ -868,5 +862,9 @@ results_df <- data.frame(k = k_values, average_mse = average_mse)
 
 # Print the results table
 print(results_df)
+```
+
+```{r}
+hist(mse_matrix[,2], main="100 runs of MSE for k=3")
 ```
 
