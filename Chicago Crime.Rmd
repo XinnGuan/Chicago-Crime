@@ -294,7 +294,7 @@ Here we set up a 5-fold cross-validation, which means that the dataset was divid
 The choice of 5-fold cross-validation helps provide a more robust assessment of the model performance. By averaging the evaluation metrics (such as ROC) over multiple folds, we obtain a more reliable estimate of how well the model is expected to perform on unseen data. Additionally, it helps detect if the model is overfitting or underfitting by assessing its consistency across different subsets of the dataset.
 
 ## Imbalance Data Experiments with a Baseline Model
-
+In this section, we further down-sample the dataset so that it only has approximately 5% data points with positive label.
 ```{r}
 set.seed(123)
 # Separate positive and negative classes
@@ -324,6 +324,7 @@ sum(downsampled_dataset[,"Arrest"]=="true")/dim(df)[1]
 set.seed(123)
 #use 80% of dataset as training set and 20% as test set 
 variables_to_convert <- c("Arrest", "Primary.Type", "weekday")
+
 imbalanced_train <- downsampled_dataset %>% dplyr::sample_frac(0.80)
 imbalanced_train[, variables_to_convert] <- lapply(imbalanced_train[, variables_to_convert], as.factor)
 imbalanced_test  <- dplyr::anti_join(downsampled_dataset, imbalanced_train, by = 'ID')
@@ -358,9 +359,9 @@ train_balanced_over$Arrest <- as.factor(train_balanced_over$Arrest)
 train_balanced_under <- ovun.sample(Arrest ~ District + DayofYear + time + 
     Primary.Type, data = imbalanced_train, method = "under")$data
 train_balanced_under$Arrest <- as.factor(train_balanced_under$Arrest)
-#train.rose <- ROSE(Arrest ~ District + DayofYear + time + Primary.Type, data = imbalanced_train)$data
-#train.rose$Arrest <- as.factor(train.rose$Arrest)
-#table(train.rose$Arrest)
+train.rose <- ROSE(Arrest ~ District + DayofYear + time + Primary.Type, data = imbalanced_train)$data
+train.rose$Arrest <- as.factor(train.rose$Arrest)
+table(train.rose$Arrest)
 table(train_balanced_over$Arrest)
 table(train_balanced_under$Arrest)
 ```
@@ -368,13 +369,13 @@ table(train_balanced_under$Arrest)
 ```{r}
 base_m_under <- train(Arrest ~District + DayofYear + time + Primary.Type, data = train_balanced_under, method = "glm", family = binomial, trControl = ctrl, metric = "ROC")
 base_m_over <- train(Arrest ~ District + DayofYear + time + Primary.Type, data = train_balanced_over, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
-#base_m_rose <- train(Arrest ~ District + DayOfYear + Hour + Primary.Type, data = train.rose, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
+base_m_rose <- train(Arrest ~ District + DayofYear + time + Primary.Type, data = train.rose, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
 ```
 
 ```{r}
 pred_under <- predict(base_m_under, imbalanced_test[,c("District", "DayofYear", "time", "Primary.Type")], type = "prob")
 pred_over <- predict(base_m_over, imbalanced_test[,c("District", "DayofYear", "time", "Primary.Type")], type = "prob")
-#pred_rose <- predict(base_m_rose, imbalanced_test[,c("District", "DayofYear", "time", "Primary.Type")], type = "prob")
+pred_rose <- predict(base_m_rose, imbalanced_test[,c("District", "DayofYear", "time", "Primary.Type")], type = "prob")
 ```
 
 ```{r}
@@ -383,7 +384,7 @@ roc_curve <- pROC::roc(imbalanced_test$Arrest, pred[,2])
 #the roc function name is used in several packages, `pROC::roc` is used to ensure the roc function is from pROC package.
 roc_curve_under <- pROC::roc(imbalanced_test$Arrest, pred_under[,2])
 roc_curve_over <- pROC::roc(imbalanced_test$Arrest, pred_over[,2])
-#roc_curve_rose <- pROC::roc(imbalanced_test$Arrest, pred_rose[,2])
+roc_curve_rose <- pROC::roc(imbalanced_test$Arrest, pred_rose[,2])
 
 # Plot the first ROC curve
 plot(roc_curve, col = "blue", lwd = 2, main = "ROC Curve")
@@ -395,28 +396,63 @@ text(0.8, 0.2, paste("AUC =", round(auc_value, 3)), col = "blue", cex = 1.2)
 # Add the other ROC curves to the plot
 lines(roc_curve_under, col = "red", lwd = 2)
 lines(roc_curve_over, col = "green", lwd = 2)
-#lines(roc_curve_rose, col = "purple", lwd = 2)
+lines(roc_curve_rose, col = "purple", lwd = 2)
 
 # Add AUC values for the other curves
 text(0.8, 0.15, paste("AUC =", round(pROC::auc(roc_curve_under), 3)), col = "red", cex = 1.2)
 text(0.8, 0.1, paste("AUC =", round(pROC::auc(roc_curve_over), 3)), col = "green", cex = 1.2)
-#text(0.8, 0.05, paste("AUC =", round(pROC::auc(roc_curve_rose), 3)), col = "purple", cex = 1.2)
+text(0.8, 0.05, paste("AUC =", round(pROC::auc(roc_curve_rose), 3)), col = "purple", cex = 1.2)
 
-legend("bottomright", legend = c("Original", "Under-sampled", "Over-sampled"),
-       col = c("blue", "red", "green"), lty = 1, lwd = 2)
+legend("bottomright", legend = c("Original", "Under-sampled", "Over-sampled","ROSE-sampled"),
+       col = c("blue", "red", "green","purple"), lty = 1, lwd = 2)
 ```
+
+Here, wwe calculate the confusion matrices for all four logistic regression models, presenting the resulting metrics in columns for convenient comparison.
 ```{r}
+# Original Predictions
+original_predictions <- ifelse(pred[,2] >= 0.5, "true", "false")
+conf_matrix_original <- confusionMatrix(as.factor(original_predictions), imbalanced_test$Arrest,
+                                        mode = "everything", positive = "true")
+metrics_original <- conf_matrix_original$byClass
+
+# Under Predictions
 under_predictions <- ifelse(pred_under[,2] >= 0.5, "true", "false")
-# create confusion matrix 
-confusionMatrix(as.factor(under_predictions), imbalanced_test$Arrest,
-                mode = "everything",
-                positive="true")
+conf_matrix_under <- confusionMatrix(as.factor(under_predictions), imbalanced_test$Arrest,
+                                     mode = "everything", positive = "true")
+metrics_under <- conf_matrix_under$byClass
+
+# Over Predictions
 over_predictions <- ifelse(pred_over[,2] >= 0.5, "true", "false")
-# create confusion matrix 
-confusionMatrix(as.factor(over_predictions), imbalanced_test$Arrest,
-                mode = "everything",
-                positive="true")
+conf_matrix_over <- confusionMatrix(as.factor(over_predictions), imbalanced_test$Arrest,
+                                    mode = "everything", positive = "true")
+metrics_over <- conf_matrix_over$byClass
+
+# Rose Predictions
+rose_predictions <- ifelse(pred_rose[,2] >= 0.5, "true", "false")
+conf_matrix_rose <- confusionMatrix(as.factor(rose_predictions), imbalanced_test$Arrest,
+                                    mode = "everything", positive = "true")
+metrics_rose <- conf_matrix_rose$byClass
+
+# Combine Metrics into a Data Frame
+metrics_df <- data.frame(
+  Scenario = c("Original", "Under-sampled", "Over-sampled", "Rose-sampled"),
+  Sensitivity = c(metrics_original["Sensitivity"], metrics_under["Sensitivity"], metrics_over["Sensitivity"], metrics_rose["Sensitivity"]),
+  Specificity = c(metrics_original["Specificity"], metrics_under["Specificity"], metrics_over["Specificity"], metrics_rose["Specificity"]),
+  Precision = c(metrics_original["Pos Pred Value"], metrics_under["Pos Pred Value"], metrics_over["Pos Pred Value"], metrics_rose["Pos Pred Value"]),
+  Positive_Predicted_Value = c(metrics_original["Pos Pred Value"], metrics_under["Pos Pred Value"], metrics_over["Pos Pred Value"], metrics_rose["Pos Pred Value"]),
+  Negative_Predictive_Value = c(metrics_original["Neg Pred Value"], metrics_under["Neg Pred Value"], metrics_over["Neg Pred Value"], metrics_rose["Neg Pred Value"]),
+  Balanced_Accuracy = c(metrics_original["Balanced Accuracy"], metrics_under["Balanced Accuracy"], metrics_over["Balanced Accuracy"], metrics_rose["Balanced Accuracy"]),
+  F1_Score = c(metrics_original["F1"], metrics_under["F1"], metrics_over["F1"], metrics_rose["F1"])
+)
+
+# Transpose the Data Frame to Swap Rows and Columns
+transposed_metrics_df <- t(metrics_df)
+
+# Display Transposed Metrics Data Frame
+print(transposed_metrics_df)
+
 ```
+
 
 Given the current highly imbalanced nature of the data, the effectiveness of comparing models using the AUC curve diminishes. It's advisable to explore alternative evaluation metrics. The provided code below computes the F-$\beta$ score, an generalization of the F-1 score, the F-1 score is included in the output of `confusionMatrix()` function. The parameter $\beta \geq 0$ is the weight assigned to recall, in the case, we should choose $\beta>1$, so we prioritize the recall.
 
