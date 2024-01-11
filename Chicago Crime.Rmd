@@ -294,7 +294,7 @@ Here we set up a 5-fold cross-validation, which means that the dataset was divid
 The choice of 5-fold cross-validation helps provide a more robust assessment of the model performance. By averaging the evaluation metrics (such as ROC) over multiple folds, we obtain a more reliable estimate of how well the model is expected to perform on unseen data. Additionally, it helps detect if the model is overfitting or underfitting by assessing its consistency across different subsets of the dataset.
 
 ## Imbalance Data Experiments with a Baseline Model
-In this section, we further down-sample the dataset so that it only has approximately 5% data points with positive label.
+In this section, we further down-sample the dataset so that it only has approximately 5% data points with positive label. We will try different re-sampling techniques includes under-sampling, over-sampling, and ROSE-sampling (Random Over-Sampling Examples), which involves generating synthetic samples within the minority class, aiming to balance the class distribution and enhance the model's ability to learn from the minority class.
 ```{r}
 set.seed(123)
 # Separate positive and negative classes
@@ -365,7 +365,7 @@ table(train.rose$Arrest)
 table(train_balanced_over$Arrest)
 table(train_balanced_under$Arrest)
 ```
-
+Upon examination of the resampled dataset, it becomes apparent that under-sampling has resulted in the removal of a substantial number of data points with positive labels, potentially leading to information loss. Conversely, the repeated sampling of data points with negative labels may introduce redundancy. In contrast, ROSE-sampling has successfully generated a dataset with a comparable number of data points to the original dataset, addressing concerns related to drastic imbalances in class representation.
 ```{r}
 base_m_under <- train(Arrest ~District + DayofYear + time + Primary.Type, data = train_balanced_under, method = "glm", family = binomial, trControl = ctrl, metric = "ROC")
 base_m_over <- train(Arrest ~ District + DayofYear + time + Primary.Type, data = train_balanced_over, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
@@ -453,11 +453,11 @@ print(transposed_metrics_df)
 
 ```
 
+All three re-sampling techniques exhibit a notable increase in sensitivity, as anticipated, while the specificity experiences a corresponding decrease, reflecting a trade-off. In the context of highly imbalanced data, this trade-off is deemed satisfactory. The metrics demonstrate close proximity across all three re-sampling techniques.
 
-Given the current highly imbalanced nature of the data, the effectiveness of comparing models using the AUC curve diminishes. It's advisable to explore alternative evaluation metrics. The provided code below computes the F-$\beta$ score, an generalization of the F-1 score, the F-1 score is included in the output of `confusionMatrix()` function. The parameter $\beta \geq 0$ is the weight assigned to recall, in the case, we should choose $\beta>1$, so we prioritize the recall.
 
 ## F-beta Score
-
+Given the current highly imbalanced nature of the data, the effectiveness of comparing models using the AUC curve diminishes. It's advisable to explore alternative evaluation metrics. The provided code below computes the F-$\beta$ score, an generalization of the F-1 score, the F-1 score is included in the output of `confusionMatrix()` function. The parameter $\beta \geq 0$ is the weight assigned to recall, in the case, we should choose $\beta>1$, so we prioritize the recall.
 ```{r}
 f_beta_score <- function(X, y, model, beta, threshold=0.5) {
   predictions <- predict(model, X, type = "prob")[,2]
@@ -945,31 +945,11 @@ Therefore, we would pursue alternative modeling techniques later on to potential
 ### KNN clustering
 
 ```{r}
-# Combine longitude and latitude into matrices
-train_coordinates <- cbind(train_data$Longitude, train_data$Latitude)
-test_coordinates <- cbind(test_data$Longitude, test_data$Latitude)
-
-# Use KNN for regression to predict the number of crimes on the test set
-predicted_crimes1 <- knn(train = train_coordinates, test = test_coordinates, cl = train_data$crimes_within_5km, k = 1)
-# Evaluate the performance (you can use various regression metrics)
-mse1 <- mean((as.numeric(predicted_crimes1) - test_data$crimes_within_5km)^2)
-print(paste(" Mean Squared Error (MSE):", mse1))
-```
-
-```{r}
 set.seed(123)
 # Combine longitude and latitude into matrices
 train_coordinates <- cbind(train_data$Longitude, train_data$Latitude)
 test_coordinates <- cbind(test_data$Longitude, test_data$Latitude)
-
-# Use KNN for regression to predict the number of crimes on the test set
-predicted_crimes3 <- knn(train = train_coordinates, test = test_coordinates, cl = train_data$crimes_within_5km, k =3)
-# Evaluate the performance (you can use various regression metrics)
-mse3 <- mean((as.numeric(predicted_crimes3) - test_data$crimes_within_5km)^2)
-print(paste(" Mean Squared Error (MSE):", mse3))
 ```
-
-
 
 ```{r}
 set.seed(123)
@@ -983,7 +963,7 @@ mse_matrix <- matrix(NA, nrow = 100, ncol = length(k_values))
 for (k_index in seq_along(k_values)) {
   for (run in 1:100) {
     # Use KNN for regression to predict the number of crimes on the test set
-    predicted_crimes <- knn(train = train_coordinates, test = test_coordinates, cl = train_data$crimes_within_5km, k = k_values[k_index])
+    predicted_crimes <- class::knn(train = train_coordinates, test = test_coordinates, cl = train_data$crimes_within_5km, k = k_values[k_index])
     
     # Evaluate the performance (you can use various regression metrics)
     mse_matrix[run, k_index] <- mean((as.numeric(predicted_crimes) - test_data$crimes_within_5km)^2)
