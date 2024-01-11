@@ -21,7 +21,6 @@ library(ROSE)
 library(knitr)
 #library(sf)
 library(spatstat)
-
 library(ggplot2)
 library(tidyr)
 library(dplyr)
@@ -33,19 +32,27 @@ library(caret)
 library(kernlab)
 library(ROCR)
 library(data.table)
-
 library(DescTools)
 library(scales)
-
 library(geosphere)
 ```
 
-## Data Processing
+# Data Processing
 
 ```{r}
 # Read data
 df <- read.csv("OriginalData.csv")
 ```
+
+
+In this investigation, we basically separate the variables into three parts, namely *Time*, *Space*, and *Type*.
+
+For the Time-related variables, we focus on `Date`. By dividing the information from the original observations, we aim to find the most variant and significant indicator to simplify our model.
+
+For the Space-related features, we select two main variables to describe the spatial information, i.e., `District` and `X(Y).coordinate`. We shall use one of them in our exploration process.
+
+For the Type-related one, we have the variable `Primary.Type` as our indicator. We shall check the crime frequency among all types to have an initial understanding of the dataset.
+
 
 ### Processing variable 'Date'
 
@@ -62,6 +69,12 @@ data %<>%
          weekday = weekdays(date))
 ```
 
+
+Our dataset has been filtered to exclude certain crime types, namely "NON-CRIMINAL," "OTHER NARCOTIC VIOLATION," "PUBLIC INDECENCY," "HUMAN TRAFFICKING," and "OBSCENITY" - which allows for a more focused analysis on specific criminal activities.
+
+Subsequently, the `Date` column has been parsed and manipulated to extract various components. This includes the creation of new columns such as `time` (hour), `date` (date), `month` (month), `DayofYear` (day of the year), and `weekday` (day of the week). 
+
+
 ### Processing missing data
 
 ```{r}
@@ -74,7 +87,7 @@ We can see that the number of missing values for the variables `X.Coordinate`, `
 data %<>%  na.omit()
 ```
 
-## Expalnatory Data Analysis
+# Expalnatory Data Analysis
 
 ```{r}
 data$Primary.Type <- as.factor(data$Primary.Type)
@@ -108,7 +121,12 @@ df_vis$Hour <- hour(df_vis$newDate)
 df_vis$Minute <- minute(df_vis$newDate)/60*10
 df_vis$Time <- df_vis$Hour + df_vis$Minute/60
 
+```
 
+
+### Weekdays
+
+```{r}
 # ----------------------------------------------------------------------------
 # Components of Dates
 # ----------------------------------------------------------------------------
@@ -123,7 +141,13 @@ ggplot(arrests_by_weekday, aes(x = WeekDay, y = num_arrests, fill = WeekDay)) +
        x = "Weekday",
        y = "Number of Arrests") +
   theme_minimal()
+```
 
+The Figure provides a clear visualisation of the distribution of arrests across weekdays. Comparing the heights of the bars, we see that the arrest number generally stays steady on weekdays, while the number on Friday and Saturday may be a little higher than on other days - which corresponds to our intuitive understanding of organized crime and provides insights into potential areas for further investigation.
+
+
+### Month & Day-of-year
+```{r}
 # Month
 arrests_by_Month <- df_vis %>%
   group_by(Month) %>%
@@ -135,19 +159,11 @@ ggplot(df_vis, aes(x = Month, fill = Month)) +
        x = "Month",
        y = "Number of Arrests") +
   theme_minimal()
+```
 
-# DayOfMonth
-arrests_by_DayOfMonth <- df_vis %>%
-  group_by(DayOfMonth) %>%
-  summarise(num_arrests = n())
+Observing the distribution of arrests across different months, the pattern represents a trigonometric and periodic trend. See above, we conjecture this could be influenced by potential factors of arrests by month, which may consist of seasonal variations, holidays, or specific events. Due to this visualized information, we shall attempt the trigonometric transformation for the corresponding features in the regression model.
 
-ggplot(df_vis, aes(x = DayOfMonth, fill = DayOfMonth)) +
-  geom_bar() +
-  labs(title = "Number of Arrests by DayOfMonth",
-       x = "DayOfMonth",
-       y = "Number of Arrests") +
-  theme_minimal()
-
+```{r}
 # DayOfYear
 arrests_by_DayOfYear <- df_vis %>%
   group_by(DayOfYear) %>%
@@ -159,7 +175,14 @@ ggplot(df_vis, aes(x = DayOfYear, fill = DayOfYear)) +
        x = "DayOfYear",
        y = "Number of Arrests") +
   theme_minimal()
+```
 
+On the other hand, considering the bar chart by Day-of-year, we find that in the period of the given year 2019, the number of arrests conveys a periodic pattern as the bar chart by Month. It seems that the arrest actions concentrate on the middle of the year, while at the end and beginning of the year, the arrest is relatively decreased.
+
+
+### Hour & Time-of-day
+
+```{r}
 # TimeOfDay
 arrests_by_TimeOfDay <- df_vis %>%
   group_by(TimeOfDay) %>%
@@ -171,7 +194,9 @@ ggplot(df_vis, aes(x = TimeOfDay, fill = TimeOfDay)) +
        x = "TimeOfDay",
        y = "Number of Arrests") +
   theme_minimal()
+```
 
+```{r}
 # hours
 arrests_by_hour <- df_vis %>%
   group_by(Hour) %>%
@@ -183,7 +208,16 @@ ggplot(df_vis, aes(x = Hour, fill = Hour)) +
        x = "Hour",
        y = "Number of Arrests") +
   theme_minimal()
+```
 
+The variable `TimeOfDay` likely categorizes the hours of the day into distinct time ranges (e.g., morning, afternoon, evening, night) and provides a visual representation of how arrests are distributed throughout the day. We plot the above two figures. In fact, the variables `Hour` and `Time-of-day` essentially convey the same information. We examine the distribution of arrests across different times of the day and identify that in the morning time ranges, the arrests are the most common, whereas during the night, we have fewer arrests - and this corresponds to the information reflected by the bar chart of `Hour`. The consistency between `Time-of-day` and `Hour` underscores the reliability of the data and the coherence of the information regarding the timing of arrests. Accounting for the variable `Hour` may encompass more detailed information than the rough time ranges; we intend to use it as the "daily" description of time-related variables.
+
+
+## Space-related Variables
+
+The two variables `District` and `X(Y).coordinate` both represent spatial knowledge, and we may use different features to assess the problems. Like the Time-related variables, they describe the situation at different levels of precision.
+
+```{r}
 # District
 arrests_by_dist <- df_vis %>%
   group_by(District) %>%
@@ -195,8 +229,16 @@ ggplot(df_vis, aes(x = District, fill = District)) +
        x = "District",
        y = "Number of Arrests") +
   theme_minimal()
+```
+
+Here we mainly consider the district-wise distribution to simplify our EDA. See above, we find some of the districts with significantly higher arrest numbers, while few of the districts even did not have arrest cases in the year 2019, which stands for variability between the districts of Chicago. To some extent, it might inform the insights of the law enforcement activities, like if there will be needed resources in such specific districts.
 
 
+## Type-related Variables
+
+We plot a heatmap to understand the distribution of crime counts across different combinations of `Primary.Type` and `TimeOfDay` on the selected weekday. Here we take Monday as an example to illustrate the main features.
+
+```{r}
 # ----------------------------------------------------------------------------
 # Relations between `Primary.Type` and `TimeOfDay` in a specific `Weekday`
 # ----------------------------------------------------------------------------
@@ -222,7 +264,14 @@ ggplot(crime_time_counts, aes(x = TimeOfDay, y = Primary.Type, fill = Count)) +
         legend.position = "right")
 ```
 
-## Feature Selection
+As shown in the above figure, we find that the type of Theft happened most commonly among all the other types. It also shows that the peak of theft is in the (early) morning. In addition, the types of battery and assault also often took place in 2019, and the time peak is in the mornings as well. The time ranges of evening and night hold the least common rate of crime, which conflicts with our intuitive understanding. The reasons behind this phenomenon need to be deeply analyzed and researched.
+
+
+# Binary Classification
+
+## Preparation
+
+### Feature Selection
 
 Our first task is to predict whether arrest or not given time, location, and the crime type.
 
@@ -231,12 +280,18 @@ data %<>% filter(District != "31")
 sum(data$District=="31")
 ```
 
-## Define Cross-validation
+### Define Cross-validation
 
 ```{r}
 # Define a 5-fold cross validation
 ctrl <- trainControl(method = "cv", number = 5, summaryFunction = twoClassSummary, classProbs = TRUE)
 ```
+
+Cross-validation is a model evaluation technique that assesses the model performance. It involves partitioning the dataset into multiple subsets, training the model on some of these subsets, and evaluating its performance on the remaining. This process is repeated multiple times, and the performance metrics are averaged over the iterations.
+
+Here we set up a 5-fold cross-validation, which means that the dataset was divided into five folds, and our model was trained over five times. In each iteration, the model was trained on four folds and tested on the remaining one. This process was repeated five times, ensuring that each fold was used as the test set exactly once.
+
+The choice of 5-fold cross-validation helps provide a more robust assessment of the model performance. By averaging the evaluation metrics (such as ROC) over multiple folds, we obtain a more reliable estimate of how well the model is expected to perform on unseen data. Additionally, it helps detect if the model is overfitting or underfitting by assessing its consistency across different subsets of the dataset.
 
 ## Imbalance Data Experiments with a Baseline Model
 
@@ -390,7 +445,11 @@ f2_over <- f_beta_score(X=imbalanced_test[,c("District", "DayofYear", "time", "P
 print(c(f2,f2_under,f2_over))
 ```
 
-## Train Test Split
+## Logistic Rregression
+
+### Training Set and Testing Set
+
+In this case, we randomly select 80% of the rows from the original dataset, creating the testing set by excluding the rows that were included in the training set. This ensures that the testing set is independent of the training set.
 
 ```{r}
 #use 80% of dataset as training set and 20% as test set 
@@ -403,16 +462,20 @@ train %<>% select(-"ID")
 test %<>% select(-"ID")
 ```
 
-## Predict Probability of Arrest
+To predict the probability of arrest, we initially intend to build up a baseline model as a comparison to help evaluate other methods. After that, we hope to involve some other variables indicating the spatial and time information, or some other interactions to improve the baseline model and achieve better classification performance.
+
 
 ### Logistic Regression Model
 
-```{r}
-# Define a 5-fold cross validation
-ctrl <- trainControl(method = "cv", number = 5, summaryFunction = twoClassSummary, classProbs = TRUE)
-```
+#### Baseline Model
 
--   base
+For the baseline model, we only select the variables `District`, `DayOfYear`, `Hour`, and `Primary.Type`:
+
+\[
+\text{Baseline Model: Arrests} \sim \text{District} + \text{DayOfYear} + \text{Hour} + \text{Primary.Type}
+\]
+
+where the first one indicates the spatial information, the second and third ones represent the time information yearly and daily, and the last indicator describes the crime types. We would like to use this model as our baseline.
 
 ```{r}
 base_m <- train(Arrest ~ District + DayofYear + time + Primary.Type, 
@@ -436,32 +499,24 @@ auc_curve <- pROC::auc(roc_curve)
 text(0.8, 0.2, paste("AUC =", round(auc_curve, 3)), col = "blue", cex = 1.2)
 ```
 
--   improvement of baseline 1
 
-```{r}
-logistic_im_1 <- train(Arrest ~ District + DayofYear + weekday + time + Primary.Type, 
-                       data = train, method = "glm", family = "binomial", trControl = ctrl, metric = "ROC")
+The trained baseline model is applied to the test dataset to generate predictions, from which we can assess its performance by various metrics, see above results.
 
-# Cannot use `Time` - result in multicollineararity
-# DayOfMonth and Month 
+The baseline model demonstrates relatively good overall performance, with an accuracy of 86.6%. The ROC curve and AUC further illustrate the ability of the model to discriminate between positive and negative instances. Sensitivity, specificity, and other performance metrics provide a comprehensive understanding of the model's strengths and limitations.
 
-pred_im_1 <- predict(logistic_im_1, test[,c("District", "DayofYear", "weekday", "time", "Primary.Type")], type = "prob")
+The model exhibits high specificity (97.46%), indicating a strong ability to correctly identify non-arrest instances. On the other hand, sensitivity (47.36%) suggests the model's capability to identify arrest cases, though there is room for improvement in capturing true positives. Precision (83.78%) reflects the reliability of the positive predictions, while the negative predictive value (86.99%) indicates the accuracy of the negative predictions.
 
-binary_predictions_im_1 <- ifelse(pred_im_1[,2] >= 0.5, "true", "false")
-# create confusion matrix 
-confusionMatrix(as.factor(binary_predictions_im_1), test$Arrest,
-                mode = "everything",
-                positive="true")
 
-roc_1 <- pROC::roc(test$Arrest, pred_im_1[,2], levels = c("true", "false"),direction = ">")
-plot(roc_1, main = "ROC Curve", col = "blue", lwd = 2)
+#### Feature Transform and Model Selection
 
-auc_1 <- pROC::auc(roc_1)
-text(0.8, 0.2, paste("AUC =", round(auc_1, 3)), col = "blue", cex = 1.2)
+According to our EDA earlier, we aim to improve the model performance on the basis of the existing baseline.
 
-```
+The improved regression model is developed by introducing quadratic terms for the variables `Hour` and `DayOfYear`. Apart from that, the improved model is trained and evaluated using the same features as the baseline model, with the addition of squared terms. That is to say:
 
--   improvement of baseline 2
+\[
+\text{Improved Model: Arrests} \sim \text{District} + \text{DayOfYear}^2 + \text{Hour}^2 + \text{Primary.Type}
+\]
+
 
 ```{r}
 train$time_t <- train$time^2
@@ -488,6 +543,17 @@ plot(roc_2, main = "ROC Curve", col = "blue", lwd = 2)
 auc_2 <- pROC::auc(roc_2)
 text(0.8, 0.2, paste("AUC =", round(auc_2, 3)), col = "blue", cex = 1.2)
 ```
+
+Using the same evaluating metrics, we obtain the results see above.
+
+Both models demonstrate high accuracy, sensitivity, and specificity. The improved model introduces quadratic terms for `Hour` and `DayofYear`, aiming to capture non-linear relationships in the data. It slightly adjusts the performance metrics, with marginal changes in accuracy, sensitivity, and specificity compared to the baseline model. The AUC values for both models are also very close, indicating similar discrimination capabilities.
+
+While both models exhibit strong predictive performance, the improved model captures potential non-linear relationships with quadratic terms, providing more flexibility in capturing complex patterns.
+
+Further exploration and feature engineering may lead to more substantial improvements in model performance. Due to the negligible improvements, we are considering changing our prediction method to approaches like SVM (support vector machine) to obtain better performance.
+
+
+
 
 ## Support Vector Machine
 
@@ -708,9 +774,9 @@ In conclusion, the implemented downsampling in Model 2 and upsampling in Model 3
 =======
 
 
-## Predict Number of Cases withing Radius of 5 km
+# Spatial Regression
 
-### Processing variable 'Date'
+## Processing variable 'Date'
 
 ```{r}
 data2 <- df %>% 
@@ -727,6 +793,9 @@ data2 %<>%
   na.omit()
 ```
 
+## Predict Number of Cases withing Radius of 5 km
+
+The second objective involves forecasting the occurrence of a specific type of crime within a 5 km radius, based on a given location point and time window. The variables `Longitude` and `Latitude` are used to denote the location, encompassing crucial distance-related information. To execute this task, it is necessary to subset the entire dataset based on the relevant `month` and `Prime.Type`. Subsequently, a new variable, `crimes_within_5km`, is created by tallying the number of data points within a 5 km radius for each row within the subset.
 
 ```{r}
 calculate_crimes_within_5km <- function(data, target_month, target_crime_type) {
@@ -750,11 +819,15 @@ calculate_crimes_within_5km <- function(data, target_month, target_crime_type) {
 
 ```
 
-# Split training and test sets
+## Split training and test sets
+
+Here we take a specific time window (January-2019) and a certain crime type (say `Primary.Type` = ROBBERY) into consideration. On the basis of the two given features, we filter the dataset and calculate the new variable `crimes_within_5km` as a separate column.
 
 ```{r}
 data_Jan_Rob <- calculate_crimes_within_5km(data2, target_month = "01", target_crime_type = "ROBBERY")
 ```
+
+Similar as the regression in the last section, we randomly select indices for the training set while ensuring that approximately 80% of the data is included. The remaining indices form the test set.
 
 ```{r}
 # Split the data into training and testing sets
@@ -764,15 +837,29 @@ train_data <- data_Jan_Rob[split_index, ]
 test_data <- data_Jan_Rob[-split_index, ]
 ```
 
-### Linear Regression
+## Linear Regression
+
+### Fitting Model
+
+The input variables for our model only include the spatial information - the `Longitude` and `Latitude`. We hope to predict the crime number given a specific month and time window, here they refer to ROBBERY and January-2019 respectively. Hence the model is of the form:
+
+\[
+\text{Linear Regression Model:} \ \text{crimes\_within\_5km} \sim \text{Longitude} + \text{Latitude}
+\]
 
 ```{r}
 # Fit a linear regression model
 reg_Jan_Rob <- lm(crimes_within_5km ~ Longitude + Latitude, data = train_data)
+```
 
+We run the above model on the test set and obtain the predictions.
+
+```{r}
 # Make predictions on the test set
 pred_Jan_Rob <- predict(reg_Jan_Rob, newdata = test_data)
 ```
+
+### Spatial Regression Evaluation
 
 ```{r}
 # Evaluate the model
@@ -788,16 +875,35 @@ print(paste("R-squared:", rsquared))
 
 ```
 
-```{r}
-# check assumptions
-par(mfrow = c(2, 2))
-plot(reg_Jan_Rob)
+An MSE of 2235.46 indicates that, on average, the squared difference between the predicted and actual number of crimes within 5 kilometers is approximately 2235.46, which is relatively high. With an MAE of 38.04, it suggests that the model's predictions deviate by approximately 38.04 units from the actual values. The RMSE of 47.28 represents the model's predictions deviate by approximately 47.28 units from the actual values. We are expecting a lower value for all three metrics.
 
+The value of \(R^2 = 0.066\) indicates that our model explains about 6.6% of the variability in the number of points within a 5-kilometer radius for robbery incidents in January. While \(R^2\) provides an indication of goodness-of-fit, the relatively lower value suggests that the factors not included in the model contribute to the variability.
+
+```{r}
 # Plotting actual vs. predicted values
 dev.new()
 plot(test_data$crimes_within_5km, pred_Jan_Rob, main = "Actual vs. Predicted", xlab = "Actual", ylab = "Predicted")
 abline(0, 1, col = "red")  # Adding a line of equality
 ```
+
+We also generate a scatter plot, comparing the actual values to the predicted values from the linear regression model for visually assessing the predictive performance of our model and identifying potential discrepancies between observed and predicted outcomes. The position of the points is far away from the red line indicating that the model's predictions aligning with the actual values is very poor.
+
+
+### Diagnostics
+
+Since the metrics and plot show a weak performance of the model, it is crucial to assess the underlying assumptions of the linear regression model. These assumptions include linearity, independence, homoscedasticity, and normality of residuals.
+
+```{r}
+# check assumptions
+par(mfrow = c(2, 2))
+plot(reg_Jan_Rob)
+```
+
+
+See above, the first plot shows the residuals vs fitted values, identifying patterns in residuals and suggesting that the model is approximately linear while representing heteroscedasticity. The Q-Q plot also confirms linearity, as the points fall approximately along a straight line. The Scale-Location checks for constant variance of residuals; it is expected that points should be scattered evenly with no discernible pattern, but the trend here refuses the assumption. The last one, Residuals vs. Leverage, identifies influential observations or outliers; our result figures out the existence of outliers, but it might not be the main reason for the poor performance of our model.
+
+Therefore, we would pursue alternative modeling techniques later on to potentially improve the predictive performance of the crime numbers.
+
 
 
 ### KNN clustering
