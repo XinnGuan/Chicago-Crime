@@ -37,6 +37,8 @@ library(scales)
 library(geosphere)
 ```
 
+The repository for this project can be found at the following link: https://github.com/XinnGuan/Chicago-Crime.
+
 # Data Processing
 
 ```{r}
