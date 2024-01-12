@@ -590,12 +590,9 @@ While both models exhibit strong predictive performance, the improved model capt
 
 Further exploration and feature engineering may lead to more substantial improvements in model performance. Due to the negligible improvements, we are considering changing our prediction method to approaches like SVM (support vector machine) to obtain better performance.
 
-
-
-
 ## Support Vector Machine
 
-Next, we use SVM to predict the outcome of a crime (arrest or no arrest) using the variables ``Primary.Type``, ``Disctrict``, ``time``, ``DayofYear`` and ``weekday``. As the relationship between outcome and variables is unclear, we use SVM with radial basis kernel. For SVM, the variables need to be one hot encoded. We also drop the variable ``DayofYear``.
+Next, we use SVM to predict the outcome of a crime (arrest or no arrest) using the variables ``Primary.Type``, ``Disctrict``, ``time`` and ``weekday``. As the relationship between outcome and variables is unclear, we use SVM with radial basis kernel. For SVM, the variables need to be one hot encoded.
 
 ```{r}
 # One hot encode data
@@ -606,12 +603,13 @@ data_svm <- one_hot(data_svm)
 
 Support Vector Machines (SVMs) face challenges with large datasets due to their cubic time complexity during training, making them computationally expensive as the dataset size increases. Additionally, SVMs often require storing the entire training dataset in memory, which can be impractical for large datasets, leading to reliance on disk storage and slowing down the training process. Furthermore, SVMs exhibit scalability issues, as the optimization problem they solve is quadratic in the number of samples, diminishing their efficiency for large-scale datasets. So when fitting our models, we will use a random sample from our data set, using 3 types of sampling methods.
 
-1. Proportional sampling: this sampling methods generates a sample where the proportion of each classes emulates the original data set.
+1. Proportional sampling: this sampling method generates a sample where the proportion of each class emulates the original data set.
 
 We take 6% of the data to train our model on, keeping the class proportions as in the original data set and use it to fit the SVM.
 
 ```{r}
 # Take proportional training sample 
+set.seed(123) # For reproducibility
 index <- createDataPartition(data_svm$Arrest, p = .06, list = TRUE)
 train <- data_svm[index$Resample,]
 train %>% dplyr::count(Arrest)
@@ -620,18 +618,21 @@ train %>% dplyr::count(Arrest)
 
 ```{r}
 # CV seeds
-seeds <- vector(mode = "list", length = 5)
-for(i in 1:5) {
+seeds <- vector(mode = "list", length = 6)
+for(i in 1:6) {
   seeds[[i]] <- sample.int(n = 1000, 3) }
 
-# CV function with 4-fold cross-validation
-control <- trainControl(method = 'cv', number = 4, allowParallel = TRUE, seeds = seeds)
+# CV function with 5-fold cross-validation
+control <- trainControl(method = 'cv', number = 5, allowParallel = TRUE, seeds = seeds)
 
 ```
 
 
 ```{r}
 # SVM with proportional sample
+
+set.seed(123)
+
 cl <- makePSOCKcluster(detectCores() - 1)
 
 registerDoParallel(cl)
@@ -640,10 +641,6 @@ svm.model <- train(Arrest ~ ., data = train, trControl = control, method = 'svmR
 
 stopCluster(cl)
 
-```
-
-
-```{r}
 # Test data
 index <- createDataPartition(data_svm$Arrest, p = .03, list = TRUE)
 
@@ -657,18 +654,19 @@ conf_matrix1 <- confusionMatrix(data = predict(svm.model, newdata = test), refer
 conf_matrix1
 ```
 
+
 2. Downsampling : downsampling is a mechanism that reduces the count of training samples falling under the majority class, by randomly removing instances from the majority class until the class distribution is balanced. This method is straightforward but may discard potentially valuable information. We make sure that the model is trained using a random sample which is the same size as the sample used to fit the model before. 
 
 ```{r}
 # Down sample the dataset
+set.seed(123) # For reproducibility
+
 data_svm$Arrest = as.factor(data_svm$Arrest)
 
 down_sample <- downSample(x = data_svm, y = data_svm$Arrest)
 
 down_sample %>% count(Arrest)
-```
 
-```{r}
 # Take random tarining data from down sampled data
 index <- createDataPartition(down_sample$Arrest, p = nrow(train)/nrow(down_sample), list = TRUE)
 
@@ -679,6 +677,8 @@ train2 %>% count(Arrest)
 ```
 
 ```{r}
+set.seed(123) # For reproducibility
+
 # Fit SVM using down sampling
 cl <- makePSOCKcluster(detectCores() - 1)
 
@@ -688,9 +688,6 @@ svm.model2 <- train(Arrest ~ ., data = train2, trControl = control, method = 'sv
 
 stopCluster(cl)
 
-```
-
-```{r}
 # Test data
 index <- createDataPartition(data_svm$Arrest, p = .03, list = TRUE)
 
@@ -704,9 +701,12 @@ conf_matrix2 <- confusionMatrix(data = predict(svm.model2, newdata = test), refe
 conf_matrix2
 ```
 
+
 3. Upsampling: this is a technique used in machine learning to address imbalanced datasets. Upsampling involves increasing the number of instances in the minority class to balance it with the number of instances in the majority class by randomly duplicating instances from the minority class until the class distribution is balanced. This method may lead to overfitting since it replicates existing instances. Again, we make sure that the model is trained using a random sample which is the same size as the samples used to fit the models before. 
 
 ```{r}
+set.seed(123) # For reproducibility
+
 # Generate up sampled dataset
 up_sample <- upSample(x = data_svm, y = data_svm$Arrest)
 
@@ -722,6 +722,8 @@ train3 %>% count(Arrest)
 ```
 
 ```{r}
+set.seed(123) # For reproducibility
+
 # Fit SVM with upsampling
 cl <- makePSOCKcluster(detectCores() - 1)
 
@@ -786,7 +788,7 @@ accuracy_table$est <- as.numeric(accuracy_table$est)
 accuracy_table$lwr <- as.numeric(accuracy_table$lwr)
 accuracy_table$upr <- as.numeric(accuracy_table$upr)
 
-accuracy_table %>% group_by(type) %>% 
+plot <- accuracy_table %>% group_by(type) %>% 
   ggplot(aes(x = type,y = est, color = type)) +
   geom_point() +
   geom_errorbar(aes(ymin = lwr, ymax = upr)) +
@@ -794,19 +796,23 @@ accuracy_table %>% group_by(type) %>%
   ylab("") + 
   xlab("Score type") +
   scale_y_continuous(n.breaks = 10) + 
-  theme_minimal()
+  theme_bw() +theme(panel.grid.major=element_line
+(colour="grey80"))+theme(panel.grid.minor=element_line(colour="grey80")) + theme(text = element_text(size=20))
+
+plot
   
 ```
 
-In the assessment of three SVM models on the Chicago crime dataset, Models 2 and 3 are meant to deal with the challenges of unbalanced training data using downsampling and upsampling. Model 2 achieves a sensitivity of 63.92% and a specificity of 84.08%, while Model 3 achieves very similar metrics with a sensitivity of 63.44% and a specificity of 84.06%. 
+In the assessment of three SVM models on the Chicago crime dataset, models 2 and 3 are meant to deal with the challenges of unbalanced training data using downsampling and upsampling. Model 2 achieves a sensitivity of 0.60 and a specificity of 0.8622, while model 3 achieves very similar metrics with a sensitivity of 0.6012 and a specificity of 0.8637. 
 
-Conversely, Model 1 demonstrates outstanding specificity at 98.12% but at the cost of poor sensitivity (44.27%). This is due to the fact that with Model 1, we used a proportional sample where the negatives outweight the positives, so in this model negative outcomes dominate. The high specificity of this model suggests that it makes very few false positive predictions, but that is because it makes few positive predictions overall. 
+Conversely, model 1 demonstrates outstanding specificity at 0.9805 but at the cost of poor sensitivity (0.4273). This is due to the fact that with model 1, we used a proportional sample where the negatives outweight the positives, so in this model negative outcomes dominate. The high specificity of this model suggests that it makes very few false positive predictions, but that is because it makes few positive predictions overall. 
 
-The choice between these models depends on the cost considerations associated with false positives and false negatives. If the priority is to minimize false positives, especially when the cost is high, Model 1 is a strong candidate due to its exceptional specificity. Alternatively, if capturing arrests is crucial and the cost of false negatives is significant, Models 2 or 3 would be the preferred choice with their superior sensitivity.
+The choice between these models depends on the cost considerations associated with false positives and false negatives. If the priority is to minimize false positives, especially when the cost is high, model 1 is a strong candidate due to its exceptional specificity. Alternatively, if capturing arrests is crucial and the cost of false negatives is significant, models 2 or 3 would be the preferred choice with their superior sensitivity.
 
-Examining the F1 score, a metric that balances precision and recall, all three models exhibit nearly identical performance. Model 1 achieves an F1 score of 58.58%, Model 2 with 57.56%, and Model 3 with 57.24%. However, Models 2 and 3 show slightly narrower intervals for the F1 scores compared to Model 1, suggesting a higher degree of confidence in the F1 scores for Models 2 and 3. 
+Examining the F1 score, a metric that balances precision and recall, all three models exhibit nearly identical performance, with a score around 0.57 for all of them. However, models 2 and 3 show slightly narrower intervals for the F1 scores compared to model 1, suggesting a higher degree of confidence in the F1 scores for models 2 and 3. 
 
-In conclusion, the implemented downsampling in Model 2 and upsampling in Model 3 have contributed to some improvements in addressing the challenges of unbalanced training data in the dataset. While these sampling techniques have led to more balanced sensitivities and specificities, the models' overall performance remains very similar to the performance of Model 1, where we used a proportional sample.
+In conclusion, the implemented downsampling in model 2 and upsampling in model 3 have contributed to some improvements in addressing the challenges of unbalanced training data in the dataset. While these sampling techniques have led to more balanced sensitivity and specificity, the models' overall performance remains very similar to the performance of model 1, where we used a proportional sample.
+
 
 
 =======
